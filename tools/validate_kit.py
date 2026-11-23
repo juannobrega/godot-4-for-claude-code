@@ -184,6 +184,52 @@ def check_powershell():
                 )
 
 
+def check_engine_pin_parses():
+    """The constitution template must yield a bare version to session_context.sh.
+
+    A trailing annotation on the Engine line made the pin a non-prefix of the
+    binary's version, so the mismatch warning fired on every prompt in every
+    freshly initialised project. A warning that always fires is a warning
+    everyone learns to ignore, which disables the check without disabling it.
+    """
+    template = CLAUDE / "templates" / "constitution.md"
+    script = CLAUDE / "scripts" / "session_context.sh"
+    if not template.exists() or not script.exists():
+        return
+    m = re.search(r"^[-*]\s*Engine:\s*(.*)$", template.read_text(), re.M)
+    if not m:
+        errors.append(".claude/templates/constitution.md: no '- Engine:' line")
+        return
+    # Extract with the shell pipeline the hook actually runs, not a Python
+    # lookalike: a reimplementation here would drift from the script and the
+    # check would end up testing itself.
+    body = script.read_text()
+    m_sed = re.search(r"PIN=\"\$\((.*?)\)\"", body, re.S)
+    if not m_sed:
+        errors.append(
+            ".claude/scripts/session_context.sh: no PIN extraction found; "
+            "check_engine_pin_parses cannot verify the template against it"
+        )
+        return
+    pipeline = m_sed.group(1).replace("\\\n", " ")
+    pipeline = pipeline.replace('"$GODOTSPEC/constitution.md"', str(template))
+    try:
+        pin = subprocess.run(["bash", "-c", pipeline], capture_output=True,
+                             text=True, timeout=10).stdout.strip()
+    except Exception as exc:
+        errors.append(f"session_context.sh PIN pipeline did not run: {exc}")
+        return
+
+    if not re.fullmatch(r"\d+\.\d+(\.\d+)?", pin):
+        errors.append(
+            f"the Engine line in .claude/templates/constitution.md yields "
+            f"{pin!r} through session_context.sh's own extraction, which is not "
+            f"a bare version. It is compared as a prefix of the binary's "
+            f"version, so anything else makes the mismatch warning fire on "
+            f"every prompt in every freshly initialised project"
+        )
+
+
 def check_templates():
     for name in ("spec.md", "plan.md", "tasks.md", "contract.md",
                  "constitution.md", "config.yml"):
@@ -198,7 +244,8 @@ def check_templates():
 
 def main():
     for check in (check_skills, check_agents, check_commands,
-                  check_hooks, check_scripts, check_powershell, check_templates):
+                  check_hooks, check_scripts, check_powershell,
+                  check_engine_pin_parses, check_templates):
         check()
     for w in warnings:
         print(f"warning: {w}")

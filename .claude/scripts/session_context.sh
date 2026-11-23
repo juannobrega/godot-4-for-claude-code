@@ -18,7 +18,11 @@ echo "text edits to .tscn/.tres; tuning numbers live in a Resource, not in code.
 # A pinned version in the constitution that the binary does not match is worth
 # more attention than the rules above, so it goes last where it is read first.
 if [ -f "$GODOTSPEC/constitution.md" ]; then
-  PIN="$(sed -n 's/^[-*][[:space:]]*Engine:[[:space:]]*\(.*\)$/\1/p' "$GODOTSPEC/constitution.md" | head -1)"
+  # Strip a trailing comment and whitespace: the version has to end up a bare
+  # prefix of what the binary reports, or the comparison below always fails and
+  # the warning fires on every prompt instead of only on a real mismatch.
+  PIN="$(sed -n 's/^[-*][[:space:]]*Engine:[[:space:]]*\(.*\)$/\1/p' "$GODOTSPEC/constitution.md" \
+         | head -1 | sed 's/<!--.*//; s/#.*//; s/[[:space:]]*$//')"
   if [ -n "$PIN" ] && [ -n "$GODOT_VERSION" ] && [ "${GODOT_VERSION#"$PIN"}" = "$GODOT_VERSION" ]; then
     echo "WARNING: constitution pins engine '$PIN' but the binary is '$GODOT_VERSION'."
   fi
