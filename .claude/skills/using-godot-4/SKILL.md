@@ -26,6 +26,7 @@ context that the task itself needs.
 | Two agents, worktrees, `.uid`, `project.godot` merges | `godot-parallel-work` |
 | Export presets, release builds | `godot-release` |
 | An MCP Godot server is connected | `godot-mcp-bridge` |
+| Updating the framework itself, or reconciling `CLAUDE.md` | run `/godot-4:update` |
 
 ## Precedence
 

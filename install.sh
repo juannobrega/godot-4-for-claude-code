@@ -8,6 +8,7 @@
 #   ./install.sh <project-dir>    install into that directory
 #
 #   --dry-run   print what would be written and write nothing
+#   --force     replace files you edited locally instead of keeping them
 #   --help
 #
 # Copies skills, commands, agents, scripts and templates into <target>/.claude/
@@ -20,13 +21,15 @@ DRY_RUN=0
 TARGET=""
 NO_PROJECT=0
 HERE=0
+FORCE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help)
-      sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     -n|--dry-run) DRY_RUN=1; shift ;;
+    -f|--force)   FORCE=1; shift ;;
     --here)   HERE=1; shift ;;
     -*) echo "error: unknown option $1 (try --help)" >&2; exit 2 ;;
     *)  [ -n "$TARGET" ] && { echo "error: more than one target given" >&2; exit 2; }
@@ -115,78 +118,27 @@ elif [ -z "$TARGET" ] && [ "$HERE" -eq 0 ] && [ "$DEST" != "$PWD" ]; then
   echo "found project root at $DEST" >&2
 fi
 
-if [ "$DRY_RUN" -eq 1 ]; then
-  echo "would install into $DEST/.claude/"
-  for d in skills commands agents scripts templates; do
-    [ -d "$SRC/.claude/$d" ] && echo "  $d/ ($(find "$SRC/.claude/$d" -type f -not -name '*.pyc' | wc -l | tr -d ' ') files)"
-  done
-  echo "  settings.json (hooks merged, existing entries kept)"
-  exit 0
+# Everything that touches files lives in installer.py, shared with install.ps1
+# so the two platforms cannot drift. It records a manifest, so a later run can
+# tell a framework file from one you wrote or edited.
+VERSION="unknown"
+[ -f "$SRC/VERSION" ] && VERSION="$(tr -d ' \r\n' < "$SRC/VERSION")"
+
+ARGS="--src $SRC --dest $DEST --version $VERSION"
+[ "$DRY_RUN" -eq 1 ] && ARGS="$ARGS --dry-run"
+[ "$FORCE" -eq 1 ] && ARGS="$ARGS --force"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "error: python3 is required, both to install and by the hooks." >&2
+  exit 1
 fi
 
-# Parity with install.ps1: an unparseable settings.json in the target must abort
-# before anything is copied, not after, so a failed install leaves no half-state.
-if [ -f "$DEST/.claude/settings.json" ]; then
-  python3 - "$DEST/.claude/settings.json" <<'CHECK' || exit 1
-import json, sys
-path = sys.argv[1]
-try:
-    data = json.load(open(path))
-except Exception as exc:
-    sys.exit(f"error: {path} is not valid JSON ({exc}).\n"
-             "Nothing was installed. Fix the file and run the installer again.")
-if not isinstance(data, dict):
-    sys.exit(f"error: {path} must contain a JSON object. Nothing was installed.")
-hooks = data.get("hooks")
-if hooks is not None and not isinstance(hooks, dict):
-    sys.exit(f"error: {path} has a 'hooks' entry that is not an object. "
-             "Nothing was installed.")
-CHECK
-fi
+# shellcheck disable=SC2086
+python3 "$SRC/installer.py" $ARGS || exit 1
+[ "$DRY_RUN" -eq 1 ] && exit 0
 
-echo "installing into $DEST/.claude/"
-mkdir -p "$DEST/.claude"
-for d in skills commands agents scripts templates; do
-  [ -d "$SRC/.claude/$d" ] || continue
-  mkdir -p "$DEST/.claude/$d"
-  cp -R "$SRC/.claude/$d/." "$DEST/.claude/$d/"
-  echo "installed .claude/$d"
-done
-# py_compile leaves these beside the scripts in a working copy. The release
-# package strips them, but someone installing from a git clone would not.
-find "$DEST/.claude" \( -name '__pycache__' -o -name '*.pyc' \) -exec rm -rf {} + 2>/dev/null || true
 chmod +x "$DEST"/.claude/scripts/*.sh "$DEST"/.claude/scripts/*.py 2>/dev/null || true
 
-python3 - "$SRC/.claude/settings.json" "$DEST/.claude/settings.json" <<'PY'
-import json, sys, os
-
-src_path, dest_path = sys.argv[1], sys.argv[2]
-incoming = json.load(open(src_path)).get("hooks", {})
-
-if os.path.exists(dest_path):
-    with open(dest_path) as fh:
-        existing = json.load(fh)
-else:
-    existing = {}
-
-hooks = existing.setdefault("hooks", {})
-added = 0
-for event, groups in incoming.items():
-    current = hooks.setdefault(event, [])
-    for group in groups:
-        # Identify a group by the scripts it runs, so re-installing is a no-op
-        # and a hand-edited matcher is not silently reverted.
-        cmds = {h.get("command") for h in group.get("hooks", [])}
-        if any(cmds & {h.get("command") for h in g.get("hooks", [])} for g in current):
-            continue
-        current.append(group)
-        added += 1
-
-with open(dest_path, "w") as fh:
-    json.dump(existing, fh, indent=2)
-    fh.write("\n")
-print(f"merged {added} hook group(s) into .claude/settings.json")
-PY
 
 cat <<'MSG'
 

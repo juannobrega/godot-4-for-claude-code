@@ -40,6 +40,13 @@ Create, from `.claude/templates/`:
 - `.godotspec/.gdignore` — empty file. Without it the Godot editor tries to
   import the markdown in `.godotspec/`
 - `.godotspec/systems/` — empty
+- `CLAUDE.md` at the project root, from `.claude/templates/project-claude.md`
+
+**`CLAUDE.md` is merged, never overwritten.** If the project already has one,
+append the framework block and leave everything else untouched — it is the
+user's file and may carry rules that predate this framework. The block imports
+`.godotspec/constitution.md` rather than restating it, so the rules have one
+source. Two copies of the same rules drift, and the drift is silent.
 
 ## 4. Report
 

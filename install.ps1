@@ -12,14 +12,16 @@
                                     the directory may be empty
     .\install.ps1 <project-dir>     install into that directory
     .\install.ps1 -DryRun           print what would be written, write nothing
+    .\install.ps1 -Force            replace files you edited locally
 
   Copies skills, commands, agents, scripts and templates into <target>\.claude\
   and MERGES the hooks into an existing settings.json rather than replacing it:
   a real project probably has hooks of its own.
 
-  Runs on Windows PowerShell 5.1 and PowerShell 7+, with no Python dependency.
-  Both settings files are parsed before anything is copied, so an invalid
-  settings.json in the target aborts the install instead of leaving it half done.
+  Runs on Windows PowerShell 5.1 and PowerShell 7+. Requires python3, which the
+  hooks need anyway. The payload work is delegated to installer.py, shared with
+  install.sh, which parses both settings files before copying anything so an
+  invalid settings.json aborts rather than leaving half an install.
 
 .EXAMPLE
   .\godot-4\install.ps1 C:\games\my-godot-project
@@ -31,7 +33,9 @@ param(
 
   [switch]$Here,
 
-  [switch]$DryRun
+  [switch]$DryRun,
+
+  [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -117,18 +121,7 @@ if ($NoProject -and $Here) {
   Write-Host "found project root at $Dest"
 }
 
-$SrcClaude    = Join-Path $Src '.claude'
-$DestClaude   = Join-Path $Dest '.claude'
-$SrcSettings  = Join-Path $SrcClaude 'settings.json'
-$DestSettings = Join-Path $DestClaude 'settings.json'
 
-# ReadAllText detects a BOM and defaults to UTF-8. Get-Content on Windows
-# PowerShell 5.1 would read a BOM-less file as the ANSI code page.
-function Read-JsonFile([string]$Path) {
-  $text = [System.IO.File]::ReadAllText($Path)
-  if ([string]::IsNullOrWhiteSpace($text)) { return [PSCustomObject]@{} }
-  return ($text | ConvertFrom-Json)
-}
 
 # The scripts a hook group runs. A group is identified by them, so
 # re-installing is a no-op and a hand-edited matcher is not silently reverted.
@@ -145,107 +138,37 @@ function Get-GroupCommands($Group) {
   return $commands
 }
 
-# --- 1. Parse both settings files before touching the target -----------------
-
-$incomingProp = (Read-JsonFile $SrcSettings).PSObject.Properties['hooks']
-if ($null -eq $incomingProp) { throw "$SrcSettings has no hooks object" }
-$incoming = $incomingProp.Value
-
-if (Test-Path -LiteralPath $DestSettings -PathType Leaf) {
-  try {
-    $existing = Read-JsonFile $DestSettings
-  } catch {
-    throw "$DestSettings is not valid JSON ($($_.Exception.Message)). Nothing was installed; fix the file and run the installer again."
-  }
-  if ($existing -isnot [System.Management.Automation.PSCustomObject]) {
-    throw "$DestSettings must contain a JSON object. Nothing was installed."
-  }
-  $hooksProp = $existing.PSObject.Properties['hooks']
-  if ($null -ne $hooksProp -and $hooksProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
-    throw "$DestSettings has a 'hooks' entry that is not an object. Nothing was installed."
-  }
-} else {
-  $existing = [PSCustomObject]@{}
+# --- Payload, manifest and hook merge ----------------------------------------
+# Delegated to installer.py, shared with install.sh so the two platforms cannot
+# drift. Python is required here because the hooks themselves are bash and
+# Python scripts: a Windows install without it produces a framework that cannot
+# run, so depending on it in the installer costs nothing and buys one
+# implementation instead of two.
+$Python = $null
+foreach ($candidate in 'python3', 'python', 'py') {
+  $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+  if ($cmd) { $Python = $cmd.Source; break }
+}
+if (-not $Python) {
+  throw ('python3 is required, both to install and by the hooks. Install it ' +
+         'from python.org or the Microsoft Store and run the installer again.')
 }
 
-# --- 2. Copy the payload -----------------------------------------------------
-
-if ($DryRun) {
-  Write-Host "would install into $DestClaude\"
-  foreach ($dir in 'skills', 'commands', 'agents', 'scripts', 'templates') {
-    $from = Join-Path $SrcClaude $dir
-    if (-not (Test-Path -LiteralPath $from -PathType Container)) { continue }
-    $n = (Get-ChildItem -LiteralPath $from -Recurse -File -Force |
-          Where-Object { $_.Extension -ne '.pyc' }).Count
-    Write-Host ("  {0}/ ({1} files)" -f $dir, $n)
-  }
-  Write-Host '  settings.json (hooks merged, existing entries kept)'
-  exit 0
+$Version = 'unknown'
+$VersionFile = Join-Path $Src 'VERSION'
+if (Test-Path -LiteralPath $VersionFile -PathType Leaf) {
+  $Version = ([System.IO.File]::ReadAllText($VersionFile)).Trim()
 }
 
-Write-Host "installing into $DestClaude\"
-New-Item -ItemType Directory -Force -Path $DestClaude | Out-Null
-foreach ($dir in 'skills', 'commands', 'agents', 'scripts', 'templates') {
-  $from = Join-Path $SrcClaude $dir
-  if (-not (Test-Path -LiteralPath $from -PathType Container)) { continue }
-  $from = (Resolve-Path -LiteralPath $from).ProviderPath
-  $to = Join-Path $DestClaude $dir
+$PyArgs = @((Join-Path $Src 'installer.py'),
+            '--src', $Src, '--dest', $Dest, '--version', $Version)
+if ($DryRun) { $PyArgs += '--dry-run' }
+if ($Force)  { $PyArgs += '--force' }
 
-  # File by file, so an existing directory is merged into rather than nested.
-  Get-ChildItem -LiteralPath $from -Recurse -File -Force |
-    Where-Object { $_.Extension -ne '.pyc' -and $_.DirectoryName -notlike '*__pycache__*' } |
-    ForEach-Object {
-    $relative = $_.FullName.Substring($from.Length).TrimStart('\', '/')
-    $out = Join-Path $to $relative
-    $parent = Split-Path -Parent $out
-    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-      New-Item -ItemType Directory -Force -Path $parent | Out-Null
-    }
-    Copy-Item -LiteralPath $_.FullName -Destination $out -Force
-  }
-  Write-Host "installed .claude/$dir"
-}
+& $Python @PyArgs
+if ($LASTEXITCODE -ne 0) { throw "installer.py exited $LASTEXITCODE" }
+if ($DryRun) { exit 0 }
 
-# --- 3. Merge the hooks --------------------------------------------------------
-
-if ($null -eq $existing.PSObject.Properties['hooks']) {
-  $existing | Add-Member -NotePropertyName 'hooks' -NotePropertyValue ([PSCustomObject]@{})
-}
-$hooks = $existing.hooks
-
-$added = 0
-foreach ($evt in $incoming.PSObject.Properties) {
-  $slot = $hooks.PSObject.Properties[$evt.Name]
-  $current = @()
-  if ($null -ne $slot -and $null -ne $slot.Value) { $current = @($slot.Value) }
-
-  foreach ($group in @($evt.Value)) {
-    $commands = Get-GroupCommands $group
-    $present = $false
-    foreach ($other in $current) {
-      foreach ($command in (Get-GroupCommands $other)) {
-        if ($commands -contains $command) { $present = $true; break }
-      }
-      if ($present) { break }
-    }
-    if ($present) { continue }
-    $current += $group
-    $added++
-  }
-
-  if ($null -ne $slot) {
-    $slot.Value = $current
-  } else {
-    $hooks | Add-Member -NotePropertyName $evt.Name -NotePropertyValue $current
-  }
-}
-
-# Written as UTF-8 without a BOM: Set-Content -Encoding UTF8 on 5.1 adds one,
-# and a BOM in front of the JSON breaks parsers that do not expect it.
-$json = $existing | ConvertTo-Json -Depth 100
-$utf8 = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($DestSettings, $json + "`n", $utf8)
-Write-Host "merged $added hook group(s) into .claude/settings.json"
 
 # --- 4. Runtime the hooks need ------------------------------------------------
 
@@ -254,7 +177,7 @@ Write-Host "merged $added hook group(s) into .claude/settings.json"
 if (-not (Get-Command bash -ErrorAction SilentlyContinue)) {
   Write-Warning 'bash was not found on PATH. The hooks are bash scripts; install Git for Windows (Git Bash) so Claude Code can run them.'
 }
-if (-not (Get-Command python3 -ErrorAction SilentlyContinue)) {
+if (-not $Python) {
   Write-Warning 'python3 was not found on PATH. guard_scene.py runs as python3; without it the scene guard hook fails.'
 }
 

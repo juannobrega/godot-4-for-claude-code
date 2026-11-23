@@ -1,6 +1,7 @@
 # Atualização e memória de projeto
 
-**Status:** especificação, nada implementado.
+**Status:** implementado. `installer.py`, `/godot-4:update`, manifesto e a ligação com
+`CLAUDE.md` estão no `.claude/` e nos instaladores.
 
 Como um projeto que já tem o framework instalado passa para uma versão nova, e como
 as regras do projeto deixam de ser reinjetadas a cada turno.
@@ -44,8 +45,17 @@ era usada aqui, se um MAJOR exige migrar artefatos. Script não faz nada disso.
 
 | Camada | Responsabilidade | Por quê |
 |---|---|---|
-| `install.sh` + manifesto | Diff determinístico: sobrescreve, remove obsoleto, troca grupos de hook, reporta conflitos | Precisa funcionar sem modelo — CI, frota, quem não tem sessão |
-| `/godot-4:update` | Lê as release notes, roda `--dry-run`, explica o que muda para este projeto, resolve conflitos, migra artefatos | É tudo o que script não prova |
+| `installer.py` | Diff determinístico: sobrescreve, remove obsoleto, troca grupos de hook, reporta conflitos | Precisa funcionar sem modelo — CI, frota, quem não tem sessão |
+| `/godot-4:update` | Lê as release notes, roda `--dry-run`, explica o que muda para este projeto, resolve conflitos, reconcilia a constituição | É tudo o que script não prova |
+
+`install.sh` e `install.ps1` passaram a ser só a casca: resolvem o destino e aplicam os
+guards. Tudo que toca arquivo está no `installer.py`, compartilhado, porque a lógica de
+manifesto duplicada em bash e PowerShell divergiria. Isso também eliminou a duplicação
+que já existia no merge de hooks, e tirou 78 linhas do `install.ps1`.
+
+A promessa de "sem dependência de Python" do `install.ps1` caiu, e não custou nada: os
+hooks são bash e Python, então uma instalação Windows sem Python produzia um framework
+que não roda. Depender dele no instalador troca duas implementações por uma.
 
 O script é o piso e não é opcional. O comando é o teto. Mesma divisão da escada
 V0–V5: determinístico onde dá, julgamento onde não dá.
@@ -95,11 +105,12 @@ update escreve o handoff, o usuário reinicia, a sessão nova lê onde parou.
 
 | # | Decisão | Proposta |
 |---|---|---|
-| D-U-01 | Edição local: preservar e avisar, ou sobrescrever | **Preservar + avisar alto**, com `--force` para limpar. Preservar tem custo real: skill antiga preservada pode contradizer script novo |
-| D-U-02 | Checagem de versão nova via API de releases | Depois. Acrescenta dependência de rede a um caminho que precisa funcionar offline |
-| D-U-03 | Fonte da verdade das regras | `CLAUDE.md` com `@import` da constituição |
+| D-U-01 | Edição local | **Preserva e avisa**, e grava o arquivo da versão nova como `.new` ao lado para diff. `--force` substitui · *implementado* |
+| D-U-02 | Checagem de versão nova via API de releases | **No comando, não no script.** O `installer.py` não toca a rede; quem consulta a API é o `/godot-4:update` · *implementado* |
+| D-U-03 | Fonte da verdade das regras | **`CLAUDE.md` com `@import` da constituição.** O hook deixou de repetir as regras e caiu de 5 linhas por turno para 1 · *implementado* |
 | D-U-04 | Rollback | Reexecutar o instalador da versão antiga. Releases são imutáveis, então sai de graça |
 | D-U-05 | O manifesto entra em `.gitignore` do usuário? | **Não.** Versionado, para o time todo saber qual versão o projeto tem |
+| D-U-06 | O que acontece sem manifesto (instalação anterior a ele) | Instala por cima e **avisa que não consegue limpar obsoletos**, por não haver registro do que foi entregue |
 
 ## 8. Não-objetivos
 
@@ -108,7 +119,22 @@ update escreve o handoff, o usuário reinicia, a sessão nova lê onde parou.
 - Update parcial ("só as skills"). Versão é um conjunto coerente.
 - Auto-update silencioso.
 
-## 9. Limitação a registrar
+## 9. Verificado
+
+Cenário de update com as quatro categorias ao mesmo tempo, em projeto Godot real:
+
+| Defeito | Resultado |
+|---|---|
+| B1 skill removida na versão nova | removida do projeto |
+| B2 hook renomeado | grupo antigo substituído; zero grupos órfãos |
+| B3 skill editada pelo usuário | preservada, com `.new` ao lado |
+| B3 skill própria do usuário | intocada |
+| B4 versão | manifesto registra 1.0.2, e exclui o arquivo editado por não ser mais nosso |
+
+As oito verificações de `tools/test_install_ps1.ps1` passam, incluindo três novas para as
+formas de destino. O empacotamento falha se `installer.py` ou `VERSION` não entrarem.
+
+## 10. Limitação a registrar
 
 Esta spec foi escrita como documento, não produzida por `/godot-4:specify`. O
 framework só opera dentro de um diretório com `project.godot`, e este repositório não

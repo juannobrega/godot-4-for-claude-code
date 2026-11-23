@@ -11,9 +11,17 @@ godot_env_load || exit 0
 
 FEATURE="$(godot_project_feature_version)"
 echo "Godot project: ${GODOT_VERSION:-unknown binary}${FEATURE:+ (project declares $FEATURE)}"
-echo "Standing rules: GDScript 4 only (await, instantiate(), @export, sig.connect(cb));"
-echo "explicit static types everywhere; %UniqueName over node paths; no structural"
-echo "text edits to .tscn/.tres; tuning numbers live in a Resource, not in code."
+
+# The standing rules belong in the project's CLAUDE.md, which loads once per
+# session. Repeating them every turn costs tokens on every message to deliver
+# something that does not change. They are printed here only as a fallback,
+# when /godot-4:init has not wired CLAUDE.md yet.
+if ! grep -q 'godotspec/constitution.md' "$GODOT_PROJECT/CLAUDE.md" 2>/dev/null; then
+  echo "Standing rules: GDScript 4 only (await, instantiate(), @export, sig.connect(cb));"
+  echo "explicit static types everywhere; %UniqueName over node paths; no structural"
+  echo "text edits to .tscn/.tres; tuning numbers live in a Resource, not in code."
+  echo "(Run /godot-4:init to move these into CLAUDE.md and stop repeating them.)"
+fi
 
 # A pinned version in the constitution that the binary does not match is worth
 # more attention than the rules above, so it goes last where it is read first.
