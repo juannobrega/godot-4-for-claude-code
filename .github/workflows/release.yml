@@ -83,10 +83,42 @@ jobs:
           cp -R .claude/skills .claude/commands .claude/agents \
                 .claude/scripts .claude/templates "$stage/.claude/"
           cp .claude/settings.json "$stage/.claude/"
-          cp LICENSE README.md install.sh install.ps1 "$stage/"
+          # INSTALL.md instead of the repository README: the README is about
+          # contributing to this framework, not about installing it.
+          cp LICENSE install.sh install.ps1 "$stage/"
           echo "$VERSION" > "$stage/VERSION"
           chmod +x "$stage/install.sh" "$stage"/.claude/scripts/*.sh \
                    "$stage"/.claude/scripts/*.py
+
+          cat > "$stage/INSTALL.md" <<'INSTALL'
+          # Install godot-4
+
+          Run the installer from inside your Godot project. It walks up to find
+          `project.godot`, so any subdirectory of the project works.
+
+          ## macOS / Linux
+
+              cd /path/to/your-godot-project
+              /tmp/godot-4/install.sh
+
+          ## Windows
+
+              cd C:\path\to\your-godot-project
+              & $env:TEMP\godot-4\install.ps1
+
+          Adjust the path if you extracted the package somewhere else.
+
+          `--dry-run` (`-DryRun` on Windows) prints what would be written without
+          writing it; `--help` lists the rest.
+
+          The installer merges its hooks into an existing `.claude/settings.json`
+          rather than replacing it, and running it twice changes nothing.
+
+          Then, in that project:
+
+              /godot-4:init
+          INSTALL
+          sed -i 's/^          //' "$stage/INSTALL.md"
 
           # validate_kit.py runs py_compile before this step, which drops a
           # __pycache__ beside the scripts. v0.1.0 shipped one.
@@ -103,9 +135,15 @@ jobs:
             echo "::error::build artefacts leaked into the package"; exit 1
           fi
 
+          # Two archives, one payload. The format is what differs by platform:
+          # unzip is absent on minimal Linux images, and tar.gz is foreign on
+          # Windows. Splitting the payload itself would only leave two identical
+          # trees to keep in step.
+          (cd dist && tar -czf godot-4.tar.gz godot-4)
           (cd dist && zip -qr godot-4.zip godot-4)
-          echo "--- package contents"
-          (cd dist && unzip -l godot-4.zip | tail -5)
+          echo "--- package root"
+          (cd dist && unzip -l godot-4.zip | awk '$4 ~ /^godot-4\/[^\/]+$/ {print $4}')
+          ls -lh dist/godot-4.tar.gz dist/godot-4.zip | awk '{print $5, $NF}'
 
       - name: Tag and publish
         env:
@@ -140,22 +178,26 @@ jobs:
 
           ## Install
 
+          **macOS / Linux** — run these from inside your Godot project. The
+          package goes to /tmp, so nothing is left in the project:
+
           \`\`\`bash
-          curl -LO https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip
-          unzip godot-4.zip && ./godot-4/install.sh /path/to/your-godot-project
+          curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/godot-4.tar.gz | tar -xz -C /tmp
+          /tmp/godot-4/install.sh
           \`\`\`
 
-          On Windows, in PowerShell:
+          **Windows** — from inside your Godot project:
 
           \`\`\`powershell
-          Invoke-WebRequest https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip -OutFile godot-4.zip
-          Expand-Archive godot-4.zip -DestinationPath .
-          powershell -ExecutionPolicy Bypass -File .\\godot-4\\install.ps1 C:\\path\\to\\your-godot-project
+          Invoke-WebRequest https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip -OutFile \$env:TEMP\\godot-4.zip
+          Expand-Archive \$env:TEMP\\godot-4.zip -DestinationPath \$env:TEMP -Force
+          & \$env:TEMP\\godot-4\\install.ps1
           \`\`\`
 
-          Then run \`/godot-4:init\` in that project. The installer merges its hooks
-          into an existing \`settings.json\` instead of replacing it, and every hook
-          stays inert in a directory with no \`project.godot\`.
+          The installer walks up to find \`project.godot\`, so any subdirectory
+          works. It merges its hooks into an existing \`settings.json\` instead of
+          replacing it, and is a no-op when run twice. \`--dry-run\` shows what it
+          would write. Then \`/godot-4:init\`.
 
           ## Contents
 
@@ -176,6 +218,7 @@ jobs:
           NOTES
           sed -i 's/^          //' notes.md
 
-          # The asset name carries no version, so the
-          # "latest/download/godot-4.zip" URL stays stable across releases.
-          gh release create "$TAG" dist/godot-4.zip --title "$TAG" --notes-file notes.md
+          # Asset names carry no version, so the "latest/download/<name>"
+          # URLs stay stable across releases.
+          gh release create "$TAG" dist/godot-4.tar.gz dist/godot-4.zip \
+            --title "$TAG" --notes-file notes.md

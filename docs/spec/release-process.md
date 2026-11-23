@@ -69,6 +69,12 @@ Semver genérico não diz nada útil para um kit de processo. Aqui:
 Regra prática: se um projeto que já usa o kit precisa **mudar algum arquivo dele** para
 continuar funcionando, é MAJOR.
 
+**A exceção é a 1.0.0.** Sair de `0.x` é uma declaração de estabilidade, não um aviso de
+quebra: diz que os comandos, o formato dos artefatos em `.godotspec/` e os degraus da
+escada passam a ter compatibilidade garantida nas versões seguintes. É a única vez que um
+MAJOR não exige nada do usuário — e, por isso, a única que é decisão de produto e não
+consequência do diff.
+
 ---
 
 ## 3. O que entra na release
@@ -97,12 +103,23 @@ O empacotamento **remove e depois confere** que nenhum `__pycache__` ou `.pyc` s
 `validate_kit.py` roda `py_compile` antes do build e a v0.1.0 chegou a publicar um. A
 verificação de vazamento checa tanto diretórios de topo quanto artefatos de build.
 
-O artefato é um zip publicado como asset da GitHub Release, com um `install.sh` (macOS e
-Linux) e um `install.ps1` (Windows) que copiam os diretórios para o projeto alvo e fazem
-**merge** dos hooks no `settings.json` existente em vez de sobrescrevê-lo. Um projeto
-Godot provavelmente já tem hooks próprios.
+São **dois assets com o mesmo payload**: `godot-4.tar.gz` e `godot-4.zip`. O que difere
+por plataforma é o formato, não o conteúdo — `unzip` não existe em imagem Linux mínima e
+`tar.gz` é estranho no Windows. Separar o payload em si só deixaria duas árvores idênticas
+para manter em sincronia, então `install.sh` e `install.ps1` vão dentro de ambos.
 
-A versão vive na tag e num `VERSION` dentro do zip, gerado no build. Nada precisa ser
+O pacote leva um `INSTALL.md` gerado no build, não o README do repositório: o README é
+sobre contribuir com o framework, não sobre instalá-lo.
+
+Os dois instaladores copiam os diretórios para o projeto alvo e fazem **merge** dos hooks
+no `settings.json` existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já
+tem hooks próprios. Ambos **sobem a árvore procurando `project.godot`** em vez de usar o
+diretório atual: o default anterior instalava onde o shell estivesse, e como o `unzip`
+deixa o pacote na pasta atual, bastava um `cd` para o `.claude` ir para dentro do pacote,
+onde o Claude Code nunca olha. Também recusam o próprio diretório do pacote como destino,
+e recusam quando não existe projeto algum.
+
+A versão vive na tag e num `VERSION` dentro do pacote, gerado no build. Nada precisa ser
 commitado em `main` a cada release.
 
 ## 4. A esteira
