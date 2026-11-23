@@ -97,9 +97,10 @@ O empacotamento **remove e depois confere** que nenhum `__pycache__` ou `.pyc` s
 `validate_kit.py` roda `py_compile` antes do build e a v0.1.0 chegou a publicar um. A
 verificação de vazamento checa tanto diretórios de topo quanto artefatos de build.
 
-O artefato é um zip publicado como asset da GitHub Release, mais um `install.sh` que
-copia os diretórios para o projeto alvo e faz **merge** dos hooks no `settings.json`
-existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já tem hooks próprios.
+O artefato é um zip publicado como asset da GitHub Release, com um `install.sh` (macOS e
+Linux) e um `install.ps1` (Windows) que copiam os diretórios para o projeto alvo e fazem
+**merge** dos hooks no `settings.json` existente em vez de sobrescrevê-lo. Um projeto
+Godot provavelmente já tem hooks próprios.
 
 A versão vive na tag e num `VERSION` dentro do zip, gerado no build. Nada precisa ser
 commitado em `main` a cada release.
@@ -116,6 +117,7 @@ incremento mora na descrição do PR e editá-la precisa revalidar.
 | Job | O que faz | Bloqueia? |
 |---|---|---|
 | `kit` | `tools/validate_kit.py`; `shellcheck -S warning`; `gdlint` no `bot_template.gd` | sim |
+| `install-windows` | `tools/test_install_ps1.ps1` em `windows-latest`, no Windows PowerShell 5.1 e no PowerShell 7: instalação limpa, reinstalação sem efeito, merge com hooks existentes e `settings.json` inválido abortando antes de copiar | sim |
 | `increment` | Lê `Release: <tipo>` da descrição, com label `release:<tipo>` como fallback | sim |
 | `review` (workflow `claude-review.yml`) | Review do Claude no PR, via `claude-code-action` | não |
 
@@ -153,7 +155,7 @@ evento de push teria que ir procurar o PR correspondente ao commit de merge.
 
 1. Revalida sobre o resultado do merge, não sobre a head do PR
 2. Calcula a versão: última tag `v*` + incremento (sem tag → `v0.0.0`)
-3. Monta o zip com o payload da §3, `VERSION` gerado e `install.sh`
+3. Monta o zip com o payload da §3, `VERSION` gerado, `install.sh` e `install.ps1`
 4. **Checa que `docs/`, `tools/` e `.github/` não vazaram** para o pacote — a exclusão é
    verificada, não assumida a partir da lista de cópia
 5. Cria a tag e publica a GitHub Release
@@ -169,6 +171,25 @@ de sobrescrevê-lo — um projeto Godot real provavelmente já tem hooks própri
 identifica um grupo pelos scripts que ele roda, então reinstalar é no-op e um matcher
 editado à mão não é revertido em silêncio.
 
+### 4.5 `install.ps1`
+
+Equivalente do `install.sh` para Windows, com o mesmo contrato: mesmos diretórios, mesma
+regra de merge por comando. Roda no Windows PowerShell 5.1 e no PowerShell 7 e não depende
+de Python, porque o merge é feito com `ConvertFrom-Json`/`ConvertTo-Json`.
+
+Duas diferenças deliberadas em relação ao `install.sh`:
+
+1. Os dois `settings.json` são lidos **antes** de qualquer cópia. Um `settings.json`
+   inválido no projeto alvo aborta a instalação sem deixar nada pela metade.
+2. O `settings.json` é gravado em UTF-8 **sem BOM**. O `Set-Content -Encoding UTF8` do
+   PowerShell 5.1 grava BOM, e um BOM antes do JSON quebra parsers que não o esperam.
+
+O instalador não reescreve os hooks: eles continuam sendo `.sh` e `.py`, executados pelo
+Git Bash. Ele avisa, sem bloquear, quando `bash` ou `python3` não estão no PATH.
+
+O job `install-windows` testa o instalador. Ele não prova que os hooks rodam numa sessão
+do Claude Code no Windows; isso continua sendo verificação manual.
+
 ## 5. Decisões
 
 | # | Decisão | Estado |
@@ -182,4 +203,5 @@ editado à mão não é revertido em silêncio.
 | D-R-09 | Onde vivem as regras de review | **`CLAUDE.md` na raiz**, arquivo único; `copilot-instructions.md` é ponteiro |
 | D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
 | D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **Sim**, sem default implícito |
+| D-R-10 | Instalação no Windows | **`install.ps1` nativo em PowerShell**, sem Python, testado em `windows-latest` nos dois hosts. Os hooks seguem em bash e rodam pelo Git Bash |
 

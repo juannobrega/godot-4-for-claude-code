@@ -36,6 +36,20 @@ unzip godot-4.zip
 ./godot-4/install.sh /caminho/do/seu-projeto-godot
 ```
 
+No Windows, pelo PowerShell:
+
+```powershell
+Invoke-WebRequest https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.zip -OutFile godot-4.zip
+Expand-Archive godot-4.zip -DestinationPath .
+powershell -ExecutionPolicy Bypass -File .\godot-4\install.ps1 C:\caminho\do\seu-projeto-godot
+```
+
+O `install.ps1` roda no Windows PowerShell 5.1 e no PowerShell 7, sem depender de
+Python. O `-ExecutionPolicy Bypass` vale só para essa execução e evita o bloqueio de
+script baixado da internet. Os hooks continuam sendo scripts bash e Python, então o
+Windows precisa do Git for Windows (Git Bash) e de `python3` no PATH; o instalador avisa
+se algum dos dois faltar.
+
 O instalador faz **merge** dos hooks num `settings.json` que já exista, em vez de
 sobrescrever. Reinstalar é no-op. Depois, dentro do projeto:
 

@@ -83,7 +83,7 @@ jobs:
           cp -R .claude/skills .claude/commands .claude/agents \
                 .claude/scripts .claude/templates "$stage/.claude/"
           cp .claude/settings.json "$stage/.claude/"
-          cp LICENSE README.md install.sh "$stage/"
+          cp LICENSE README.md install.sh install.ps1 "$stage/"
           echo "$VERSION" > "$stage/VERSION"
           chmod +x "$stage/install.sh" "$stage"/.claude/scripts/*.sh \
                    "$stage"/.claude/scripts/*.py
@@ -143,6 +143,14 @@ jobs:
           \`\`\`bash
           curl -LO https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip
           unzip godot-4.zip && ./godot-4/install.sh /path/to/your-godot-project
+          \`\`\`
+
+          On Windows, in PowerShell:
+
+          \`\`\`powershell
+          Invoke-WebRequest https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip -OutFile godot-4.zip
+          Expand-Archive godot-4.zip -DestinationPath .
+          powershell -ExecutionPolicy Bypass -File .\\godot-4\\install.ps1 C:\\path\\to\\your-godot-project
           \`\`\`
 
           Then run \`/godot-4:init\` in that project. The installer merges its hooks
