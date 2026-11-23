@@ -3,7 +3,7 @@
 **Status:** implementado em `.claude/` · **Engine alvo:** Godot 4.7.x
 
 Este documento é a especificação. O framework que ela descreve está construído em
-[`.claude/`](../../.claude): 15 skills, 14 comandos, 3 agentes, 5 hooks, 7 scripts e
+[`.claude/`](../../.claude): 15 skills, 14 comandos, 7 agentes, 5 hooks, 7 scripts e
 6 templates.
 
 Baseado em [prior-art.md](../research/prior-art.md) e [godot-constraints.md](../research/godot-constraints.md).
@@ -289,15 +289,29 @@ reference > 100 linhas, sem informação datada fora de seção "padrões antigo
 
 ---
 
-## 10. Agentes
+## 10. Agentes (7)
 
-| Agente | Ferramentas | Papel |
+Um agente se justifica quando satisfaz pelo menos um destes critérios. Fora deles, o
+mesmo conteúdo é mais barato como skill ou como script:
+
+- **Isolamento** — precisa *não* saber algo que a sessão principal sabe
+- **Volume** — leitura ou tentativa-e-erro que encheria o contexto de quem chamou
+- **Incentivo conflitante** — quem construiu é o pior juiz do que construiu
+
+| Agente | Critério | Papel |
 |---|---|---|
-| `godot-4:verifier` | read-only + Bash | Roda a escada, lê evidência, reporta. Nunca corrige — só reporta |
-| `godot-4:blind-qa` | Bash + escrita só em `/tmp` | Testa o sistema **contra `contract.md`**, sem acesso ao código nem ao `plan.md`. Scripts headless descartáveis (ideia do gg-godot) |
-| `godot-4:auditor` | read-only | Gap analysis spec↔código para o `converge` |
+| `verifier` | volume + incentivo | Roda a escada, lê a evidência, reporta. Nunca corrige |
+| `blind-qa` | isolamento + incentivo | Testa contra `contract.md`, sem ver código, `plan.md` nem `spec.md` |
+| `auditor` | volume | Gap analysis spec↔código para o `converge` |
+| `spec-reviewer` | incentivo | Audita a spec antes de existir código: transição de estado faltando, critério no degrau errado, número que virará literal |
+| `test-writer` | isolamento + volume | Escreve testes V2/V3 a partir dos critérios, **sem ler a implementação** — senão testa o que o código faz, não o que foi prometido |
+| `scene-builder` | volume | Escreve e roda o build script até o `.tscn` carregar. Só cena nova; mudança estrutural em cena feita no editor volta como tarefa humana |
+| `researcher` | volume | Resolve uma dúvida de API na *minor* exata do projeto e devolve só a conclusão |
 
-A separação builder/judge é deliberada: o agente que escreveu o código é o pior juiz dele.
+**O que deliberadamente não virou agente:** detecção de API do Godot 3 e conferência de
+`.uid` são determinísticas — viram script e hook, onde reprovam de verdade, em vez de
+dependerem de um modelo reparar. Profiling foi absorvido pelo `verifier`: é mais uma
+leitura de evidência, não outro papel.
 
 ---
 
@@ -342,7 +356,7 @@ godot-4-for-claude-code/
 │   ├── settings.json           # os 5 hooks
 │   ├── skills/<nome>/SKILL.md  # 15 skills (+ references/ onde faz sentido)
 │   ├── commands/godot-4/*.md   # 14 comandos → /godot-4:<nome>
-│   ├── agents/*.md             # verifier, blind-qa, auditor
+│   ├── agents/*.md             # 7 agentes (§10)
 │   ├── scripts/*.sh|*.py|*.gd  # hooks, escada de verificação, scaffolding
 │   └── templates/              # spec, plan, tasks, contract, constitution, config
 ├── CLAUDE.md                   # regras de review, lidas pelo Claude

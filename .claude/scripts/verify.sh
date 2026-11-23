@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=godot_env.sh
 . "$SCRIPT_DIR/godot_env.sh"
 
-TARGET="${1:-V3}"; [ "${TARGET#-}" != "$TARGET" ] && TARGET="V3"
+TARGET_ARG="${1:-}"; [ "${TARGET_ARG#-}" != "$TARGET_ARG" ] && TARGET_ARG=""
 SYSTEM=""
 while [ $# -gt 0 ]; do
   case "$1" in --system) SYSTEM="${2:-}"; shift 2 ;; *) shift ;; esac
@@ -27,6 +27,12 @@ case $? in
   2) echo "verify: Godot binary not found. Set godot_bin in .godotspec/config.yml or export GODOT_BIN." >&2; exit 1 ;;
 esac
 
+# config.yml is the project's settings file, so honour it before the defaults.
+TARGET="${TARGET_ARG:-$(godot_cfg default_rung V3)}"
+UNIT_DIR="$(godot_cfg_nested test_dirs unit tests/unit)"
+INTEGRATION_DIR="$(godot_cfg_nested test_dirs integration tests/integration)"
+FRAMEWORK="$(godot_cfg test_framework auto)"
+
 EVIDENCE="${GODOTSPEC}/systems/${SYSTEM}/evidence"
 [ -z "$SYSTEM" ] && EVIDENCE="${GODOTSPEC}/evidence"
 mkdir -p "$EVIDENCE"
@@ -34,6 +40,7 @@ STAMP="$(date +%Y%m%dT%H%M%S)"
 LOG="$EVIDENCE/verify-$STAMP.log"
 RUNG_MAX="${TARGET#V}"
 FAILED=0
+SKIPPED=""
 
 say() { printf '%-3s %-4s %s\n' "$1" "$2" "$3"; }
 record() { printf '[%s] %s %s %s\n' "$(date -u +%FT%TZ)" "$1" "$2" "$3" >> "$LOG"; }
@@ -42,6 +49,9 @@ rung() {  # rung <n> <label> ; returns 0 when this rung should run
 }
 pass() { say "$1" PASS "$2"; record "$1" PASS "$2"; }
 fail() { say "$1" FAIL "$2"; record "$1" FAIL "$2"; FAILED=1; }
+# A rung that could not run is not a rung that passed. Reporting both as PASS
+# is the same dishonesty the anti-false-green rules exist to prevent.
+skip() { say "$1" SKIP "$2"; record "$1" SKIP "$2"; SKIPPED="$SKIPPED $1"; }
 
 # Godot exits 0 after a SCRIPT ERROR, so the exit code alone proves nothing.
 # Every rung that runs the engine must also scan its output.
@@ -53,7 +63,8 @@ if rung 0; then
   : > "$OUT"
   if command -v gdlint >/dev/null 2>&1; then
     # Only lint tracked scripts; addons/ is third-party and not ours to style.
-    GD_FILES="$(find "$GODOT_PROJECT" -name '*.gd' -not -path '*/addons/*' -not -path '*/.godot/*')"
+    GD_FILES="$(find "$GODOT_PROJECT" -name '*.gd' -not -path '*/addons/*' \
+                -not -path '*/.godot/*' -not -path '*/.claude/*')"
     if [ -n "$GD_FILES" ]; then
       printf '%s\n' "$GD_FILES" | tr '\n' '\0' | xargs -0 gdlint >> "$OUT" 2>&1
       GDLINT_RC=$?
@@ -61,9 +72,11 @@ if rung 0; then
       echo "no .gd files outside addons/" >> "$OUT"; GDLINT_RC=0
     fi
   else
-    echo "gdlint not installed (pip install gdtoolkit)" >> "$OUT"; GDLINT_RC=0
+    skip V0 "gdlint not installed (pip install gdtoolkit)"
+    GDLINT_RC=-1
   fi
-  if [ "$GDLINT_RC" -eq 0 ]; then pass V0 "gdlint clean"; else fail V0 "gdlint findings ($OUT)"; fi
+  if [ "$GDLINT_RC" -eq 0 ]; then pass V0 "gdlint clean"
+  elif [ "$GDLINT_RC" -gt 0 ]; then fail V0 "gdlint findings ($OUT)"; fi
 fi
 
 # ------------------------------------------------- V1 import, load, uid sync
@@ -90,15 +103,21 @@ run_tests() {   # run_tests <rung> <dir>
   low="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
   local out="$EVIDENCE/$low-$STAMP.txt"
   local xml="$GODOT_PROJECT/reports/$low-junit.xml"
-  [ -d "$GODOT_PROJECT/$dir" ] || { pass "$rg" "no $dir/, nothing to run"; return; }
+  [ -d "$GODOT_PROJECT/$dir" ] || { skip "$rg" "no $dir/ in this project"; return; }
   mkdir -p "$GODOT_PROJECT/reports"
   rm -f "$xml"
 
-  if [ -d "$GODOT_PROJECT/addons/gut" ]; then
+  case "$FRAMEWORK" in
+    gut)     [ -d "$GODOT_PROJECT/addons/gut" ]     || { fail "$rg" "config.yml says gut, but addons/gut is missing"; return; } ;;
+    gdunit4) [ -d "$GODOT_PROJECT/addons/gdUnit4" ] || { fail "$rg" "config.yml says gdunit4, but addons/gdUnit4 is missing"; return; } ;;
+    none)    skip "$rg" "test_framework is none in config.yml"; return ;;
+  esac
+
+  if [ "$FRAMEWORK" != "gdunit4" ] && [ -d "$GODOT_PROJECT/addons/gut" ]; then
     "$GODOT_BIN" --headless --path "$GODOT_PROJECT" -s addons/gut/gut_cmdln.gd \
       "-gdir=res://$dir" -gexit "-gjunit_xml_file=res://reports/$low-junit.xml" > "$out" 2>&1
     local rc=$?
-  elif [ -d "$GODOT_PROJECT/addons/gdUnit4" ]; then
+  elif [ "$FRAMEWORK" != "gut" ] && [ -d "$GODOT_PROJECT/addons/gdUnit4" ]; then
     # gdUnit4 refuses headless without this flag and exits 103 before running.
     "$GODOT_BIN" --headless --path "$GODOT_PROJECT" -s res://addons/gdUnit4/bin/GdUnitCmdTool.gd \
       -a "res://$dir" --ignoreHeadlessMode > "$out" 2>&1
@@ -110,7 +129,7 @@ run_tests() {   # run_tests <rung> <dir>
     esac
     xml="$(ls -t "$GODOT_PROJECT"/reports/report_*/results.xml 2>/dev/null | head -1)"
   else
-    pass "$rg" "no test framework installed (addons/gut or addons/gdUnit4)"; return
+    skip "$rg" "no test framework under addons/ (gut or gdUnit4)"; return
   fi
 
   if [ "$rc" -ne 0 ]; then fail "$rg" "test runner exited $rc ($out)"; return; fi
@@ -125,14 +144,14 @@ run_tests() {   # run_tests <rung> <dir>
   pass "$rg" "$n test(s) passed ($xml)"
 }
 
-rung 2 && run_tests V2 "tests/unit"
-rung 3 && run_tests V3 "tests/integration"
+rung 2 && run_tests V2 "$UNIT_DIR"
+rung 3 && run_tests V3 "$INTEGRATION_DIR"
 
 # ------------------------------------------------------------ V4 bot run
 if rung 4; then
   OUT="$EVIDENCE/v4-$STAMP.txt"
   if [ ! -f "$GODOT_PROJECT/tools/bot.gd" ]; then
-    pass V4 "no tools/bot.gd, rung not applicable"
+    skip V4 "no tools/bot.gd in this project"
   else
     # --fixed-fps makes physics and timers reproducible; --quit-after stops a
     # hung run from blocking CI. Args after -- reach OS.get_cmdline_user_args().
@@ -155,6 +174,7 @@ mkdir -p "$GODOTSPEC/.session"
 
 echo "---"
 echo "evidence: $LOG"
+[ -n "$SKIPPED" ] && echo "not run:$SKIPPED — these prove nothing either way"
 if [ "$FAILED" -eq 0 ]; then
   echo "V5 is human judgement and was not run. Pending items: ${GODOTSPEC}/checks.md"
 fi

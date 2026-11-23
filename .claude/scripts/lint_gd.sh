@@ -28,9 +28,15 @@ if printf '%s' "$P" | grep -qE '^(SCRIPT ERROR|ERROR|Parse Error)'; then
   OUT="$OUT$P"$'\n'
 fi
 
-[ -z "$OUT" ] && exit 0
-
 SESS="$GODOTSPEC/.session"; mkdir -p "$SESS"
+
+# A clean write ends the streak. Without this the escalation below fires on
+# every later failure in the session, however many good writes came between.
+if [ -z "$OUT" ]; then
+  rm -f "$SESS/lint-fails"
+  exit 0
+fi
+
 N=$(( $(cat "$SESS/lint-fails" 2>/dev/null || echo 0) + 1 ))
 echo "$N" > "$SESS/lint-fails"
 

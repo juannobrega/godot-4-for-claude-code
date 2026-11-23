@@ -112,11 +112,54 @@ jobs:
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
 
-          # The asset name carries no version, so the marketplace-style
+          # Release notes are written from the package itself, so the counts
+          # can never drift from what actually shipped.
+          skills=$(find dist/godot-4/.claude/skills -name SKILL.md | wc -l | tr -d ' ')
+          commands=$(find dist/godot-4/.claude/commands -name '*.md' | wc -l | tr -d ' ')
+          agents=$(find dist/godot-4/.claude/agents -name '*.md' | wc -l | tr -d ' ')
+          hooks=$(python3 -c "import json;print(sum(len(v) for v in json.load(open('dist/godot-4/.claude/settings.json'))['hooks'].values()))")
+
+          if [ "$PREVIOUS" = "v0.0.0" ]; then
+            changes="First release."
+            compare=""
+          else
+            changes="$(git log --no-merges --pretty='- %s' "$PREVIOUS..HEAD")"
+            compare="**Full changelog:** https://github.com/${{ github.repository }}/compare/$PREVIOUS...$TAG"
+          fi
+
+          cat > notes.md <<NOTES
+          Spec-driven development framework for Godot 4 in Claude Code.
+
+          ## Install
+
+          \`\`\`bash
+          curl -LO https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip
+          unzip godot-4.zip && ./godot-4/install.sh /path/to/your-godot-project
+          \`\`\`
+
+          Then run \`/godot-4:init\` in that project. The installer merges its hooks
+          into an existing \`settings.json\` instead of replacing it, and every hook
+          stays inert in a directory with no \`project.godot\`.
+
+          ## Contents
+
+          | | |
+          |---|---|
+          | Skills | $skills |
+          | Commands | $commands |
+          | Agents | $agents |
+          | Hooks | $hooks |
+
+          ## Changes
+
+          $changes
+
+          From #$PR_NUMBER — $PR_TITLE
+
+          $compare
+          NOTES
+          sed -i 's/^          //' notes.md
+
+          # The asset name carries no version, so the
           # "latest/download/godot-4.zip" URL stays stable across releases.
-          gh release create "$TAG" dist/godot-4.zip \
-            --title "$TAG" \
-            --notes "$(printf '%s\n\n%s\n\n%s\n' \
-              "From #$PR_NUMBER — $PR_TITLE" \
-              "Install: download godot-4.zip, unzip, run ./install.sh <your-godot-project>" \
-              "Full changelog: https://github.com/${{ github.repository }}/compare/$PREVIOUS...$TAG")"
+          gh release create "$TAG" dist/godot-4.zip --title "$TAG" --notes-file notes.md

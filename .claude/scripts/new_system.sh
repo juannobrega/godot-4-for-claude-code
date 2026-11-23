@@ -24,8 +24,12 @@ DIR="$GODOTSPEC/systems/$ID-$SLUG"
 [ -d "$DIR" ] && { echo "$DIR already exists" >&2; exit 1; }
 mkdir -p "$DIR/evidence"
 
+# dash-attack -> DashAttack, so templates can name a GDScript class correctly.
+CLASS="$(printf '%s' "$SLUG" | awk -F- '{for(i=1;i<=NF;i++) printf toupper(substr($i,1,1)) substr($i,2)}')"
+
 TPL="$SCRIPT_DIR/../templates"
 for f in spec plan tasks contract; do
-  sed -e "s/{{ID}}/$ID/g" -e "s/{{SLUG}}/$SLUG/g" "$TPL/$f.md" > "$DIR/$f.md"
+  sed -e "s/{{ID}}/$ID/g" -e "s/{{SLUG}}/$SLUG/g" -e "s/{{CLASS}}/$CLASS/g" \
+      "$TPL/$f.md" > "$DIR/$f.md"
 done
 echo "$DIR"
