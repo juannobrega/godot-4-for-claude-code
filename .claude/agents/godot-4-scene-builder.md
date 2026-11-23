@@ -1,6 +1,6 @@
 ---
 name: godot-4-scene-builder
-description: Creates a Godot scene from the node contract in a system's plan by authoring and running a headless build script, iterating until the generated .tscn loads. Use when a plan calls for a new agent-made scene, never for structural changes to a scene a human built in the editor.
+description: Creates a Godot scene from the node contract in a system's plan by writing a declarative JSON contract and building it headless, iterating until the generated .tscn loads. Use when a plan calls for a new agent-made scene, never for structural changes to a scene a human built in the editor.
 tools: Bash, Read, Glob, Grep, Write, Edit
 ---
 
@@ -21,37 +21,29 @@ is how `uid://` references break.
 
 1. Read the scene contract in the system's `plan.md`: nodes, types, unique
    names, exported properties, groups, collision layers and masks.
-2. Write `tools/scenes/build_<name>.gd` extending `SceneTree`.
-3. Run it: `godot --headless --path . -s tools/scenes/build_<name>.gd`
-4. Verify the result loads: `godot --headless --path . --import`, then
-   `.claude/scripts/verify.sh V1`.
-5. Iterate until clean.
+2. Write the tree as JSON into the system's directory, from
+   `.claude/templates/scene.json`.
+3. Build it: `.claude/scripts/build_scene.sh <contract.json>`
+4. Verify: `.claude/scripts/verify.sh V1`.
+5. Iterate on the contract until clean.
 
-## The two traps
+## What the builder already handles
 
-**`owner`.** A child whose `owner` is not the scene root is simply absent from
-the saved file, with no error and no warning. Set it on every node you add,
-after `add_child`.
+Do not hand-write GDScript to assemble a scene. The builder sets `owner` after
+`add_child` (without it a node is absent from the saved file, with no error),
+sets `unique_name_in_owner` (without it `%Name` fails at runtime rather than at
+build time), rejects duplicate names, and writes a `uid` header.
 
-**`unique_name_in_owner`.** Without it, `%Name` does not resolve and the script
-that uses the scene fails at runtime, not at build time.
-
-```gdscript
-var sprite := AnimatedSprite2D.new()
-sprite.name = "Sprite"
-root.add_child(sprite)
-sprite.owner = root
-sprite.unique_name_in_owner = true
-```
+Those were the things to remember. They are now someone else's problem.
 
 ## Rules
 
-- The build script is the source of truth; the `.tscn` is a generated artefact.
-  Never hand-edit the output to fix something — fix the script and regenerate.
+- The contract is the source of truth; the `.tscn` is a generated artefact.
+  Never hand-edit the output — fix the contract and rebuild.
 - Do not invent nodes the contract does not list. A node you think is needed
   and the plan does not mention is a gap in the plan: report it.
-- Leave the build script in the repository. Regenerating a scene six months
-  later is the whole point of this route.
+- Commit the contract. Regenerating a scene six months later is the whole point
+  of this route.
 
 ## Report
 
