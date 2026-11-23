@@ -1,6 +1,10 @@
 # godot-4 — especificação do kit spec-driven para Godot 4 no Claude Code
 
-**Status:** rascunho para discussão · **Data:** 2026-11-23 · **Engine alvo:** Godot 4.7.x
+**Status:** implementado em `.claude/` · **Engine alvo:** Godot 4.7.x
+
+Este documento é a especificação. O framework que ela descreve está construído em
+[`.claude/`](../../.claude): 15 skills, 14 comandos, 3 agentes, 5 hooks, 7 scripts e
+6 templates.
 
 Baseado em [prior-art.md](../research/prior-art.md) e [godot-constraints.md](../research/godot-constraints.md).
 
@@ -35,7 +39,7 @@ Este kit é a junção que falta, com três ideias que nenhum dos dois lados tem
 
 | # | Princípio | Consequência prática |
 |---|---|---|
-| P1 | **Pequeno e roteado, não enciclopédico** | Teto rígido de ~14 skills. Uma skill-router na entrada. Rejeitamos o modelo de 100+ skills (*Power of One* / context storm) |
+| P1 | **Pequeno e roteado, não enciclopédico** | Teto rígido de 15 skills. Uma skill-router na entrada. Rejeitamos o modelo de 100+ skills (*Power of One* / context storm) |
 | P2 | **Honestidade sobre verificação** | Nenhum gate mente. Critério não-automatizável é marcado como humano e entra numa fila de julgamento, não é silenciosamente aprovado |
 | P3 | **Determinismo onde dá, guard onde não dá** | Scripts com saída estável (`verify.sh`) em vez de o agente inventar o comando. Hooks que bloqueiam o que o agente erra de forma recorrente |
 | P4 | **A spec é o contrato; o código converge para ela** | Loop de convergência spec↔código, não o inverso. O código nunca é a fonte da verdade do design |
@@ -257,7 +261,7 @@ Conjunto mínimo viável (MVP): `init`, `specify`, `plan`, `tasks`, `implement`,
 
 ---
 
-## 9. Skills (teto: 14)
+## 9. Skills (teto: 15)
 
 Router-first. Só a `using-godot-4` descreve o mapa; as outras são carregadas sob demanda.
 
@@ -277,6 +281,7 @@ Router-first. Só a `using-godot-4` descreve o mapa; as outras são carregadas s
 | `godot-performance` | orçamento de frame, profiling | budgets por plataforma, custos comuns |
 | `godot-parallel-work` | 2+ agentes / worktrees | worktree, cache `.godot`, `override.cfg`, merge de `project.godot` |
 | `godot-release` | export, presets, CI | `--export-release`, presets, pipeline |
+| `godot-mcp-bridge` | um MCP de Godot está conectado | o que ele substitui e o que não substitui (§18) |
 
 Todas seguem as regras de autoria: `SKILL.md` < 500 linhas, descrição em terceira pessoa
 dizendo *o que faz e quando usar*, referências a **um nível** de profundidade, ToC em
@@ -333,29 +338,32 @@ justificativa, erro com mensagem acionável, saída parseável.
 
 ```
 godot-4-for-claude-code/
-├── .claude-plugin/plugin.json
-├── skills/<nome>/SKILL.md (+ references/, scripts/)
-├── commands/*.md
-├── agents/*.md
-├── hooks/hooks.json
-├── scripts/*.sh|*.py|*.gd
-├── templates/              # spec.md, plan.md, tasks.md, contract.md, constitution.md...
-├── evals/                  # casos de eval do `claude plugin eval`
-└── docs/
+├── .claude/                    ← o framework; é isto que o usuário instala
+│   ├── settings.json           # os 5 hooks
+│   ├── skills/<nome>/SKILL.md  # 15 skills (+ references/ onde faz sentido)
+│   ├── commands/godot-4/*.md   # 14 comandos → /godot-4:<nome>
+│   ├── agents/*.md             # verifier, blind-qa, auditor
+│   ├── scripts/*.sh|*.py|*.gd  # hooks, escada de verificação, scaffolding
+│   └── templates/              # spec, plan, tasks, contract, constitution, config
+├── .github/copilot-instructions.md
+├── tools/validate_kit.py       # gate de CI; não vai para o usuário
+└── docs/                       # pesquisa e especificação; não vai para o usuário
 ```
+
+Os comandos ficam em `commands/godot-4/` porque o subdiretório vira o namespace:
+`/godot-4:specify`. Os scripts de hook saem sem efeito em qualquer repositório sem
+`project.godot` — é o que permite o framework conviver com este repo, que não é um
+jogo.
 
 **O projeto Godot de validação fica fora deste repositório.** O kit é exercitado de ponta
 a ponta num jogo pequeno e completo mantido num projeto separado; aqui entram apenas os
 casos de `evals/` e os achados que voltam de lá. Nada de `examples/` no repo.
 
-Distribuição como **plugin** do Claude Code (marketplace próprio no repo), porque é o que
-permite entregar skills + commands + agents + hooks + scripts num pacote versionado.
-`claude plugin validate --strict` no CI.
-
-O layout acima pode mudar conforme a forma de empacotamento escolhida: se a release for
-publicada como zip (`archive`), ele vale como está; se o plugin for servido por caminho
-relativo, o kit desce para um subdiretório e `docs/` fica na raiz. Ver
-[release-process.md §3](release-process.md).
+Distribuição copiando `.claude/` para o projeto Godot. Como não é um plugin,
+`claude plugin validate` não se aplica: o gate equivalente é `tools/validate_kit.py`,
+que checa frontmatter, tamanho de skill, links quebrados, hooks apontando para scripts
+existentes e executáveis, sintaxe dos scripts e incompatibilidades de bash 4 / GNU
+coreutils. Ver [release-process.md §3](release-process.md).
 
 ---
 
@@ -403,13 +411,13 @@ relativo, o kit desce para um subdiretório e `docs/` fica na raiz. Ver
 - `verify.sh` nunca reporta verde com zero testes executados (teste de regressão próprio).
 - Todo AC V5 chega ao humano com roteiro de playtest, nunca marcado como concluído sozinho.
 - Metadata total das skills ≤ ~1.500 tokens no startup.
-- `claude plugin validate --strict` limpo.
+- `tools/validate_kit.py` limpo.
 
 ## 17. Decisões
 
 | # | Decisão | Default proposto |
 |---|---|---|
-| D-P-01 | Distribuição: plugin com marketplace próprio vs. `.claude/` copiável | **Plugin.** É o único formato que entrega hooks, e sem os hooks o guard de `.tscn` e o verify-before-done não existem · *decidido* |
+| D-P-01 | Distribuição: plugin vs. `.claude/` copiável | **`.claude/`** · *decidido pelo usuário em 22/11*. A justificativa anterior ("plugin é o único formato que entrega hooks") estava errada: `.claude/settings.json` de projeto suporta hooks normalmente. Plugin é sobre distribuição, não sobre capacidade |
 | D-P-02 | Framework de teste padrão | **GUT.** Roda headless sem flag extra, exit code binário, JUnit XML. gdUnit4 suportado como alternativa para quem precisa do scene runner · *decidido* |
 | D-P-03 | MCP de Godot: obrigatório, opcional ou ausente | **Opcional**, com `tugcantopaloglu/godot-mcp` como alvo de integração (§18) · *decidido* |
 | D-P-04 | Idioma do conteúdo do kit (skills/commands) | **Inglês** no kit, docs em PT-BR. A `description` da skill é o que decide o match no startup, e o vocabulário técnico do Godot e do ecossistema é inglês · *decidido* |

@@ -1,6 +1,8 @@
 # Branches, versionamento e release
 
-**Status:** modelo de branches em vigor desde já · pipeline é **trabalho futuro**, não implementar ainda.
+**Status:** modelo de branches em vigor · pipeline é **trabalho futuro**, não implementar ainda.
+`.github/copilot-instructions.md` já existe: é inerte sem a esteira, e é o que torna a
+review do Copilot específica deste kit quando ela for ligada.
 
 Repositório: `github.com/juannobrega/godot-4-for-claude-code`. O usuário fala em *merge
 request*; no GitHub o equivalente é **pull request**. Neste documento: **MR**.
@@ -17,11 +19,17 @@ Apenas **duas** branches no repositório. Qualquer outra é erro.
 | `dev` | Branch de trabalho | Único origem de MR. Todo commit de desenvolvimento nasce aqui |
 
 ```
-dev  ──●──●──●──●─────────────●──●──●──▶
+dev  ──●──●──●──●─────────────●──●──●──▶   todo push vai para cá
                  \           /
 main ─────────────●─────────●───────────▶   cada merge = uma release
                   v0.2.0    v0.3.0
+          ↑ PR aberto = esteira roda
 ```
+
+**Push vai sempre para `dev`.** A esteira de CI/CD roda **na abertura do pull request
+para `main`** — não a cada push. Isso dá ao `dev` liberdade para commits intermediários
+quebrados sem gastar execução de pipeline, e concentra a validação no ponto em que ela
+decide alguma coisa.
 
 **Consequência aceita conscientemente:** sem branches de feature, tudo que estiver em `dev`
 no momento do MR entra na mesma release. Não há como soltar metade do trabalho acumulado.
@@ -66,120 +74,89 @@ continuar funcionando, é MAJOR.
 
 ## 3. O que entra na release
 
-**Entra** — o kit executável:
+O framework é um diretório `.claude/`, não um plugin do Claude Code. Isso simplifica o
+empacotamento: não há `plugin.json` com versão fixada, não há entrada de marketplace para
+atualizar, e nenhuma escrita automatizada em branch protegida.
+
+**Entra** — o payload que o usuário copia para o projeto Godot dele:
 
 ```
-.claude-plugin/plugin.json
-skills/      commands/      agents/
-hooks/       scripts/       templates/
-LICENSE      README.md
+.claude/settings.json      .claude/skills/      .claude/commands/
+.claude/agents/            .claude/scripts/     .claude/templates/
+LICENSE                    README.md
 ```
 
-**Não entra** — material de projeto:
+**Não entra** — material do repositório:
 
 ```
-docs/        (pesquisa e especificação)
-evals/       (casos de teste do próprio kit)
+docs/                      especificação e pesquisa
+tools/                     validador do próprio kit
+.github/                   instruções de review
 ```
 
-### 3.1 O problema: o caminho normal de instalação traz o repo inteiro
+O artefato é um zip publicado como asset da GitHub Release, mais um `install.sh` que
+copia os diretórios para o projeto alvo e faz **merge** dos hooks no `settings.json`
+existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já tem hooks próprios.
 
-Um plugin instalado de um marketplace com `source` apontando para o repositório recebe
-**todos os arquivos do repositório**. Então "excluir `docs/` da release" não acontece
-sozinho — depende de escolher a forma do `source` no `marketplace.json`.
-
-Três formas possíveis, confirmadas na [referência de marketplace](https://code.claude.com/docs/en/plugins/marketplace-reference):
-
-| Opção | `source` da entrada | `docs/` chega ao usuário? | Custo |
-|---|---|---|---|
-| **A — archive** | `{"source":"archive","url":".../releases/latest/download/godot-4.zip"}` | **não** | Pipeline monta o zip e publica a release. A entrada nunca muda (§3.3) |
-| **B — subdiretório** | `"./plugin"` (caminho relativo, resolvido a partir da raiz do marketplace) | sim, mas inerte — só `plugin/` é carregado | Reorganizar o repo: kit em `plugin/`, docs na raiz |
-| **C — repo inteiro** | `{"source":"github","repo":"<owner>/<repo>","ref":"v1.2.0"}` | sim | Nenhum — mas **não atende ao requisito** |
-
-### 3.2 Recomendação: opção A
-
-Além de ser a única que cumpre o requisito literalmente, ela resolve um problema de
-versionamento que a B tem.
-
-O `version` do `plugin.json` **fixa o usuário naquela versão até mudar**, então o pipeline
-precisa necessariamente escrevê-lo a cada release. Com a opção B, isso é um commit de bump
-direto em `main` — que é protegida e só aceita MR. Saídas seriam dar bypass de proteção ao
-token de CI, ou bumpar na própria `dev` antes do merge (e aí a decisão major/minor/patch
-teria que ser tomada duas vezes).
-
-Com a opção A o `plugin.json` é **gerado no build**: o pipeline deriva a versão da tag e a
-injeta no zip, sem commitar nada em `main`. Nenhum bypass de proteção, nenhuma divergência
-entre `main` e `dev`.
-
-### 3.3 Como o `marketplace.json` nunca precisa ser tocado
-
-O ponto fraco aparente da opção A seria ter que reescrever a URL do zip a cada release.
-Não precisa: o GitHub serve um endereço estável que redireciona para o asset da release
-mais recente.
-
-```json
-{
-  "name": "godot-4",
-  "source": {
-    "source": "archive",
-    "url": "https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.zip"
-  }
-}
-```
-
-Com o nome do asset fixo (`godot-4.zip`, sem versão embutida), a entrada é escrita **uma
-vez** e nunca mais. O pipeline só publica a release; nada é commitado em `main`, não há
-bypass de proteção, e `main` e `dev` jamais divergem.
-
-**O preço:** abrir mão do `sha256`. Ele é opcional — quando presente, o Claude Code recusa
-um download que não bata —, mas um digest fixo é incompatível com uma URL cujo conteúdo
-muda a cada release. Troca aceita: o repositório é de um mantenedor só, e a alternativa
-custa um commit automatizado em branch protegida a cada release.
-
-**A verificar antes de implementar:** que o cliente siga o redirect de
-`/releases/latest/download/` dentro dos limites de download de arquivos hospedados.
-Se não seguir, cai-se no plano B — URL versionada e um único commit automatizado em `main`
-restrito ao `marketplace.json`.
-
----
+A versão vive na tag e num `VERSION` dentro do zip, gerado no build. Nada precisa ser
+commitado em `main` a cada release.
 
 ## 4. Esboço do pipeline (não implementar ainda)
 
-Disparado por: merge de MR em `main`.
+Duas etapas, em momentos diferentes.
+
+### 4.1 Na abertura do PR `dev → main` — validação
 
 ```
-1. claude plugin validate --strict .          # gate — warnings viram falha
-2. shellcheck scripts/*.sh ; python -m py_compile scripts/*.py
-3. ler o tipo de incremento da descrição do MR  → falhar se ausente/inválido
-4. calcular a nova versão a partir da última tag
-5. montar o pacote: só as pastas da §3, com plugin.json.version injetado
-6. criar a tag vX.Y.Z
-7. publicar a GitHub Release com o zip e o sha256
-8. atualizar a entrada do marketplace.json  (ver D-R-02)
+1. tools/validate_kit.py                 # frontmatter, tamanho de skill, links,
+                                         # hooks apontando para scripts existentes,
+                                         # sintaxe dos scripts, bash 4 / GNU-ismos
+2. shellcheck .claude/scripts/*.sh
+3. GitHub Copilot code review            # revisor automático (ver 4.2)
+4. ler o incremento da descrição do PR   # falhar se ausente ou inválido
 ```
 
-### 4.1 Onde o eval roda
+### 4.2 GitHub Copilot como validador
 
-`claude plugin eval` **não** entra no pipeline de release: rodar os casos depois do merge é
-tarde demais, a release já está acontecendo. O eval é gate do **MR**, junto com o
-`validate --strict`. O pipeline de `main` revalida e publica.
+O Copilot é adicionado como revisor automático do PR, guiado por
+[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md). Sem esse
+arquivo ele revisaria shell e Markdown genéricos; com ele, revisa contra as regras que
+este kit realmente tem — bash 3.2 do macOS, GNU-ismos, hooks que precisam sair sem efeito
+fora de um projeto Godot, hook bloqueante sem escape hatch, os cinco modos de falso-verde
+do `verify.sh`, e API do Godot 3 vazando para exemplos que o usuário vai copiar.
+
+**Limite a registrar antes de montar a esteira:** o Copilot code review **comenta, não
+reprova**. Ele não produz um check de status que a proteção de branch possa exigir, e a
+review dele não conta como aprovação para efeito de branch protection. Então:
+
+- **Gate duro** = `validate_kit.py` + `shellcheck` + o parsing do incremento. São eles
+  que reprovam o merge.
+- **Copilot** = revisor cuja saída é lida antes do merge. Para torná-lo semi-bloqueante,
+  a opção é exigir que conversas do PR estejam resolvidas na proteção de branch — o que
+  obriga a responder cada comentário dele, mas também aos comentários humanos.
+
+Chamar o Copilot de "validador" sem essa distinção criaria a impressão de um gate que
+não existe. Ele é a segunda leitura; o gate é script.
+
+### 4.3 No merge em `main` — release
 
 ```
-MR (dev → main):   claude plugin validate --strict  +  claude plugin eval  +  lint de scripts
-merge em main:     revalida, empacota, taggeia, publica
+5. revalidar
+6. calcular a nova versão a partir da última tag e do incremento
+7. montar o zip com as pastas da §3 e um VERSION gerado
+8. criar a tag vX.Y.Z
+9. publicar a GitHub Release com o zip
 ```
-
----
 
 ## 5. Decisões
 
 | # | Decisão | Estado |
 |---|---|---|
 | D-R-01 | Parâmetro de incremento | **Linha `Release: <major\|minor\|patch>` na descrição do MR.** O pipeline aceita também uma label `release:<tipo>` como fallback — aditivo, não substitui |
-| D-R-02 | Onde vive o `marketplace.json` e quem o atualiza | **`.claude-plugin/marketplace.json` no repo, apontando para a URL `releases/latest/download/`. Nunca é atualizado pelo pipeline** (§3.3) |
-| D-R-03 | `claude plugin eval` como gate | **Gate do MR, não do release** (§4.1) |
-| D-R-04 | Forma de empacotamento | **Opção A — archive** |
+| D-R-02 | Marketplace / `plugin.json` | **Não se aplica.** O framework é um `.claude/`, não um plugin (D-P-01) |
+| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck` como gate duro, na abertura do PR** |
+| D-R-04 | Forma de empacotamento | **Zip do payload da §3 como asset da GitHub Release, com `install.sh` que faz merge dos hooks** |
+| D-R-06 | GitHub Copilot na esteira | **Revisor automático do PR, guiado por `.github/copilot-instructions.md`.** Comenta, não reprova — o gate duro continua sendo script (§4.2) |
+| D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
 | D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **Sim**, sem default implícito |
 
-Tarefa de verificação pendente antes de implementar: confirmar que o cliente segue o
-redirect de `/releases/latest/download/` (§3.3).

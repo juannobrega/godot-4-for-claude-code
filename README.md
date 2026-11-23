@@ -3,13 +3,30 @@
 Kit de **spec-driven development** para desenvolvimento de jogos em **Godot 4** com o
 Claude Code.
 
-> **Status: especificação.** Nenhum código ainda. Estamos definindo o que o kit é.
+> **Status:** framework construído em [`.claude/`](.claude), especificação em `docs/`.
+> A esteira de CI/CD ainda não existe.
+
+## O que tem aqui
+
+```
+.claude/
+├── settings.json          5 hooks: guard de cena, lint pós-escrita,
+│                          contexto da engine, baseline, verify-before-done
+├── skills/                15 skills, roteadas por using-godot-4
+├── commands/godot-4/      14 comandos  →  /godot-4:init, :specify, :verify …
+├── agents/                verifier · blind-qa · auditor
+├── scripts/               escada de verificação, hooks, scaffolding, bot
+└── templates/             spec · plan · tasks · contract · constitution · config
+```
+
+Para usar num projeto Godot: copie `.claude/` para o projeto e rode `/godot-4:init`.
+Fora de um projeto com `project.godot`, todos os hooks saem sem efeito.
 
 ## Documentos
 
 | Documento | Conteúdo |
 |---|---|
-| [docs/spec/kit-spec.md](docs/spec/kit-spec.md) | **A especificação do kit** — tese, princípios, artefatos, escada de verificação, comandos `/godot-4:*`, skills, agentes, hooks, riscos, levantamento de MCP servers, decisões |
+| [docs/spec/kit-spec.md](docs/spec/kit-spec.md) | **A especificação do framework** — tese, princípios, artefatos, escada de verificação, comandos `/godot-4:*`, skills, agentes, hooks, riscos, levantamento de MCP servers, decisões |
 | [docs/spec/release-process.md](docs/spec/release-process.md) | Modelo de branches (`main` + `dev`), versionamento semver dirigido pela descrição do MR, e o que entra no pacote de release |
 | [docs/research/prior-art.md](docs/research/prior-art.md) | Levantamento de kits SDD (Spec Kit, Agent OS, BMAD) e de coleções de skills de Godot, com análise de lacunas |
 | [docs/research/godot-constraints.md](docs/research/godot-constraints.md) | Restrições técnicas verificadas do Godot 4 que determinam o desenho: `.tscn`/`.uid`, comandos headless, exit codes, armadilhas de CI, input simulado, trabalho paralelo |
