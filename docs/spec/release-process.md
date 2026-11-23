@@ -113,33 +113,33 @@ incremento mora na descrição do PR e editá-la precisa revalidar.
 |---|---|---|
 | `kit` | `tools/validate_kit.py`; `shellcheck -S warning`; `gdlint` no `bot_template.gd` | sim |
 | `increment` | Lê `Release: <tipo>` da descrição, com label `release:<tipo>` como fallback | sim |
-| `copilot` | Pede a review do Copilot via GraphQL | não (`continue-on-error`) |
+| `review` (workflow `claude-review.yml`) | Review do Claude no PR, via `claude-code-action` | não |
 
 Um detalhe de segurança: a descrição do PR é entrada não confiável. Ela chega aos scripts
 por variável de ambiente, nunca interpolada direto no comando — `${{ }}` dentro de um
 `run:` é injeção de shell.
 
-### 4.2 GitHub Copilot como validador
+### 4.2 Revisor de IA: Claude, não Copilot
 
-O Copilot é adicionado como revisor automático do PR, guiado por
-[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md). Sem esse
-arquivo ele revisaria shell e Markdown genéricos; com ele, revisa contra as regras que
-este kit realmente tem — bash 3.2 do macOS, GNU-ismos, hooks que precisam sair sem efeito
-fora de um projeto Godot, hook bloqueante sem escape hatch, os cinco modos de falso-verde
-do `verify.sh`, e API do Godot 3 vazando para exemplos que o usuário vai copiar.
+`claude-review.yml` roda o plugin oficial `code-review` via `claude-code-action`,
+autenticado com `CLAUDE_CODE_OAUTH_TOKEN` — token de assinatura gerado por
+`claude setup-token`, válido em Pro, Max, Ultra, Team e Enterprise. Com ele os runs
+saem na assinatura em vez de billing de API.
 
-**Limite a registrar antes de montar a esteira:** o Copilot code review **comenta, não
-reprova**. Ele não produz um check de status que a proteção de branch possa exigir, e a
-review dele não conta como aprovação para efeito de branch protection. Então:
+**Por que não o Copilot.** O Copilot code review exige plano pago a partir do Pro
+($10/mês) e, desde 01/06/2026, consome AI credits por review. Na conta deste repositório
+ele não está disponível: `suggestedActors` não retorna o bot e a REST responde
+422 "Reviews may only be requested from collaborators". O job que pedia a review foi
+**removido** — ele ficava verde sem ter feito nada, que é exatamente o gate desonesto
+que este kit existe para impedir.
 
-- **Gate duro** = `validate_kit.py` + `shellcheck` + o parsing do incremento. São eles
-  que reprovam o merge.
-- **Copilot** = revisor cuja saída é lida antes do merge. Para torná-lo semi-bloqueante,
-  a opção é exigir que conversas do PR estejam resolvidas na proteção de branch — o que
-  obriga a responder cada comentário dele, mas também aos comentários humanos.
+As regras de review vivem em [`CLAUDE.md`](../../CLAUDE.md) na raiz, em um arquivo só.
+`.github/copilot-instructions.md` ficou como ponteiro, para que habilitar o Copilot um
+dia não exija reescrever nada.
 
-Chamar o Copilot de "validador" sem essa distinção criaria a impressão de um gate que
-não existe. Ele é a segunda leitura; o gate é script.
+**Limite que continua valendo:** o review comenta, não reprova. O gate duro é
+`validate.yml`. E quando o secret não existe, o job diz isso no resumo do PR em vez de
+passar em silêncio.
 
 ### 4.3 `release.yml` — no merge em `main`
 
@@ -174,7 +174,8 @@ editado à mão não é revertido em silêncio.
 | D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck -S warning` + `gdlint` como gate duro, na abertura do PR** |
 | D-R-08 | Patamar do shellcheck | **`-S warning` bloqueia.** A execução 45187189794 confirmou a base limpa nesse nível, então um achado novo é regressão |
 | D-R-04 | Forma de empacotamento | **Zip do payload da §3 como asset da GitHub Release, com `install.sh` que faz merge dos hooks** |
-| D-R-06 | GitHub Copilot na esteira | **Revisor automático do PR, guiado por `.github/copilot-instructions.md`.** Comenta, não reprova — o gate duro continua sendo script (§4.2) |
+| D-R-06 | Revisor de IA na esteira | **`claude-code-action` com token de assinatura**, não Copilot. O Copilot exige plano pago e não está disponível nesta conta (§4.2) |
+| D-R-09 | Onde vivem as regras de review | **`CLAUDE.md` na raiz**, arquivo único; `copilot-instructions.md` é ponteiro |
 | D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
 | D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **Sim**, sem default implícito |
 
