@@ -88,12 +88,20 @@ jobs:
           chmod +x "$stage/install.sh" "$stage"/.claude/scripts/*.sh \
                    "$stage"/.claude/scripts/*.py
 
-          # Guard the exclusion rather than trusting the copy list above.
+          # validate_kit.py runs py_compile before this step, which drops a
+          # __pycache__ beside the scripts. v0.1.0 shipped one.
+          find "$stage" \( -name '__pycache__' -o -name '*.pyc' \) -exec rm -rf {} +
+
+          # Guard the exclusion rather than trusting the copy list above: a
+          # correct list today starts leaking the day someone adds a directory.
           for unwanted in docs tools .github .git; do
             if [ -e "$stage/$unwanted" ]; then
               echo "::error::$unwanted leaked into the package"; exit 1
             fi
           done
+          if find "$stage" \( -name '__pycache__' -o -name '*.pyc' \) | grep -q .; then
+            echo "::error::build artefacts leaked into the package"; exit 1
+          fi
 
           (cd dist && zip -qr godot-4.zip godot-4)
           echo "--- package contents"

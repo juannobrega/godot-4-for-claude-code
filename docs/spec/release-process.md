@@ -93,6 +93,10 @@ tools/                     validador do próprio kit
 .github/                   instruções de review
 ```
 
+O empacotamento **remove e depois confere** que nenhum `__pycache__` ou `.pyc` sobrou: o
+`validate_kit.py` roda `py_compile` antes do build e a v0.1.0 chegou a publicar um. A
+verificação de vazamento checa tanto diretórios de topo quanto artefatos de build.
+
 O artefato é um zip publicado como asset da GitHub Release, mais um `install.sh` que
 copia os diretórios para o projeto alvo e faz **merge** dos hooks no `settings.json`
 existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já tem hooks próprios.
