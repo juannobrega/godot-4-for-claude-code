@@ -83,17 +83,25 @@ jobs:
           cp -R .claude/skills .claude/commands .claude/agents \
                 .claude/scripts .claude/templates "$stage/.claude/"
           cp .claude/settings.json "$stage/.claude/"
-          cp LICENSE README.md install.sh "$stage/"
+          cp LICENSE README.md install.sh install.ps1 "$stage/"
           echo "$VERSION" > "$stage/VERSION"
           chmod +x "$stage/install.sh" "$stage"/.claude/scripts/*.sh \
                    "$stage"/.claude/scripts/*.py
 
-          # Guard the exclusion rather than trusting the copy list above.
+          # validate_kit.py runs py_compile before this step, which drops a
+          # __pycache__ beside the scripts. v0.1.0 shipped one.
+          find "$stage" \( -name '__pycache__' -o -name '*.pyc' \) -exec rm -rf {} +
+
+          # Guard the exclusion rather than trusting the copy list above: a
+          # correct list today starts leaking the day someone adds a directory.
           for unwanted in docs tools .github .git; do
             if [ -e "$stage/$unwanted" ]; then
               echo "::error::$unwanted leaked into the package"; exit 1
             fi
           done
+          if find "$stage" \( -name '__pycache__' -o -name '*.pyc' \) | grep -q .; then
+            echo "::error::build artefacts leaked into the package"; exit 1
+          fi
 
           (cd dist && zip -qr godot-4.zip godot-4)
           echo "--- package contents"
@@ -135,6 +143,14 @@ jobs:
           \`\`\`bash
           curl -LO https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip
           unzip godot-4.zip && ./godot-4/install.sh /path/to/your-godot-project
+          \`\`\`
+
+          On Windows, in PowerShell:
+
+          \`\`\`powershell
+          Invoke-WebRequest https://github.com/${{ github.repository }}/releases/latest/download/godot-4.zip -OutFile godot-4.zip
+          Expand-Archive godot-4.zip -DestinationPath .
+          powershell -ExecutionPolicy Bypass -File .\\godot-4\\install.ps1 C:\\path\\to\\your-godot-project
           \`\`\`
 
           Then run \`/godot-4:init\` in that project. The installer merges its hooks
