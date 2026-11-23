@@ -1,0 +1,137 @@
+name: Validate
+
+# Runs on the pull request into main, not on every push to dev. dev is free to
+# carry broken intermediate commits; validation happens where it decides
+# something. "edited" is included because the release increment lives in the
+# pull request description.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  kit:
+    name: Kit structure and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # frontmatter, skill size, broken links, hooks pointing at scripts that
+      # exist and are executable, script syntax, bash 4 and GNU-only constructs
+      - name: Validate kit structure
+        run: python3 tools/validate_kit.py
+
+      # Definite bugs block. Style and warning findings are reported but do not
+      # fail the build yet: the threshold tightens once the first real run shows
+      # what this codebase actually trips.
+      - name: ShellCheck (errors block)
+        run: shellcheck -x -S error .claude/scripts/*.sh install.sh
+
+      - name: ShellCheck (warnings, informational)
+        continue-on-error: true
+        run: shellcheck -x -S warning .claude/scripts/*.sh install.sh
+
+      # The bot template is copied verbatim by users. Godot 3 API or a syntax
+      # error here propagates into every project that adopts the kit.
+      - name: Lint shipped GDScript
+        run: |
+          pip install --quiet gdtoolkit
+          gdlint .claude/scripts/bot_template.gd
+
+  increment:
+    name: Release increment declared
+    runs-on: ubuntu-latest
+    steps:
+      # The body is untrusted input, so it is passed through the environment
+      # and never interpolated into the shell command itself.
+      - name: Read the increment from the pull request
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+        run: |
+          increment="$(printf '%s' "$PR_BODY" \
+            | grep -ioE '^Release:[[:space:]]*(major|minor|patch)[[:space:]]*$' \
+            | head -1 | tr -d ' \r' | cut -d: -f2 | tr 'A-Z' 'a-z')"
+
+          # Fallback: a release:<type> label. Additive; the description wins.
+          if [ -z "$increment" ]; then
+            for label in $PR_LABELS; do
+              case "$label" in
+                release:major|release:minor|release:patch)
+                  increment="${label#release:}" ;;
+              esac
+            done
+          fi
+
+          if [ -z "$increment" ]; then
+            echo "::error::No release increment declared."
+            echo "Add a line to the pull request description:"
+            echo "    Release: minor"
+            echo "Accepted: major | minor | patch. Or apply a release:<type> label."
+            echo "There is no implicit default: a silent patch bump hides a decision"
+            echo "nobody made."
+            exit 1
+          fi
+          echo "increment: $increment"
+          echo "### Release increment: \`$increment\`" >> "$GITHUB_STEP_SUMMARY"
+
+  copilot:
+    name: Request Copilot review
+    runs-on: ubuntu-latest
+    # Copilot comments, it does not block. A failure to request the review must
+    # never fail the pull request: the hard gates are the jobs above.
+    continue-on-error: true
+    if: github.event.action == 'opened' || github.event.action == 'reopened'
+    steps:
+      - name: Add Copilot as a reviewer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # The Copilot reviewer is a bot actor; its node id has to be looked up
+          # per repository before it can be requested.
+          bot_id="$(gh api graphql -f query='
+            query($owner:String!, $repo:String!) {
+              repository(owner:$owner, name:$repo) {
+                suggestedActors(capabilities:[CAN_BE_ASSIGNED], first:100) {
+                  nodes { login ... on Bot { id } }
+                }
+              }
+            }' -f owner="$OWNER" -f repo="$REPO" \
+            --jq '.data.repository.suggestedActors.nodes[]
+                  | select(.login=="copilot-pull-request-reviewer")
+                  | .id')"
+
+          if [ -z "$bot_id" ]; then
+            echo "::notice::Copilot review is not available on this repository."
+            echo "Enable it in repository settings, or add it to a ruleset for"
+            echo "automatic review on every pull request."
+            exit 0
+          fi
+
+          pr_id="$(gh api graphql -f query='
+            query($owner:String!, $repo:String!, $pr:Int!) {
+              repository(owner:$owner, name:$repo) {
+                pullRequest(number:$pr) { id }
+              }
+            }' -f owner="$OWNER" -f repo="$REPO" -F pr="$PR" \
+            --jq '.data.repository.pullRequest.id')"
+
+          gh api graphql -f query='
+            mutation($pr:ID!, $bot:ID!) {
+              requestReviews(input:{pullRequestId:$pr, userIds:[$bot], union:true}) {
+                clientMutationId
+              }
+            }' -f pr="$pr_id" -f bot="$bot_id"
+
+          echo "Copilot requested. It reviews against .github/copilot-instructions.md."

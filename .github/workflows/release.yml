@@ -1,0 +1,122 @@
+name: Release
+
+# Fires when a pull request into main is merged, not on push to main. The
+# pull_request event carries the description, which is where the release
+# increment is declared -- a push event would have to go looking for it.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0        # tags are needed to compute the next version
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Revalidate on the merged result. The pull request was validated against
+      # its own head; main is what actually ships.
+      - name: Revalidate
+        run: |
+          python3 tools/validate_kit.py
+          shellcheck -x -S error .claude/scripts/*.sh install.sh
+
+      - name: Compute the next version
+        id: version
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+        run: |
+          increment="$(printf '%s' "$PR_BODY" \
+            | grep -ioE '^Release:[[:space:]]*(major|minor|patch)[[:space:]]*$' \
+            | head -1 | tr -d ' \r' | cut -d: -f2 | tr 'A-Z' 'a-z')"
+          if [ -z "$increment" ]; then
+            for label in $PR_LABELS; do
+              case "$label" in
+                release:major|release:minor|release:patch)
+                  increment="${label#release:}" ;;
+              esac
+            done
+          fi
+          if [ -z "$increment" ]; then
+            echo "::error::Merged without a release increment. Tag by hand, or"
+            echo "reopen with 'Release: <major|minor|patch>' in the description."
+            exit 1
+          fi
+
+          last="$(git tag --list 'v*' --sort=-v:refname | head -1)"
+          [ -z "$last" ] && last="v0.0.0"
+          IFS=. read -r major minor patch <<< "${last#v}"
+
+          case "$increment" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          version="$major.$minor.$patch"
+
+          echo "version=$version"       >> "$GITHUB_OUTPUT"
+          echo "tag=v$version"          >> "$GITHUB_OUTPUT"
+          echo "increment=$increment"   >> "$GITHUB_OUTPUT"
+          echo "previous=$last"         >> "$GITHUB_OUTPUT"
+          echo "$last + $increment -> v$version" >> "$GITHUB_STEP_SUMMARY"
+
+      # Only the payload a user installs. docs/, tools/ and .github/ are how
+      # this repository is built, not what it ships.
+      - name: Build the package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          stage="dist/godot-4"
+          mkdir -p "$stage/.claude"
+          cp -R .claude/skills .claude/commands .claude/agents \
+                .claude/scripts .claude/templates "$stage/.claude/"
+          cp .claude/settings.json "$stage/.claude/"
+          cp LICENSE README.md install.sh "$stage/"
+          echo "$VERSION" > "$stage/VERSION"
+          chmod +x "$stage/install.sh" "$stage"/.claude/scripts/*.sh \
+                   "$stage"/.claude/scripts/*.py
+
+          # Guard the exclusion rather than trusting the copy list above.
+          for unwanted in docs tools .github .git; do
+            if [ -e "$stage/$unwanted" ]; then
+              echo "::error::$unwanted leaked into the package"; exit 1
+            fi
+          done
+
+          (cd dist && zip -qr godot-4.zip godot-4)
+          echo "--- package contents"
+          (cd dist && unzip -l godot-4.zip | tail -5)
+
+      - name: Tag and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PREVIOUS: ${{ steps.version.outputs.previous }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+          # The asset name carries no version, so the marketplace-style
+          # "latest/download/godot-4.zip" URL stays stable across releases.
+          gh release create "$TAG" dist/godot-4.zip \
+            --title "$TAG" \
+            --notes "$(printf '%s\n\n%s\n\n%s\n' \
+              "From #$PR_NUMBER — $PR_TITLE" \
+              "Install: download godot-4.zip, unzip, run ./install.sh <your-godot-project>" \
+              "Full changelog: https://github.com/${{ github.repository }}/compare/$PREVIOUS...$TAG")"

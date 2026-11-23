@@ -1,8 +1,7 @@
 # Branches, versionamento e release
 
-**Status:** modelo de branches em vigor · pipeline é **trabalho futuro**, não implementar ainda.
-`.github/copilot-instructions.md` já existe: é inerte sem a esteira, e é o que torna a
-review do Copilot específica deste kit quando ela for ligada.
+**Status:** implementado. Branches em vigor, esteira em
+[`.github/workflows/`](../../.github/workflows).
 
 Repositório: `github.com/juannobrega/godot-4-for-claude-code`. O usuário fala em *merge
 request*; no GitHub o equivalente é **pull request**. Neste documento: **MR**.
@@ -101,20 +100,28 @@ existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já tem h
 A versão vive na tag e num `VERSION` dentro do zip, gerado no build. Nada precisa ser
 commitado em `main` a cada release.
 
-## 4. Esboço do pipeline (não implementar ainda)
+## 4. A esteira
 
 Duas etapas, em momentos diferentes.
 
-### 4.1 Na abertura do PR `dev → main` — validação
+### 4.1 `validate.yml` — na abertura do PR `dev → main`
 
-```
-1. tools/validate_kit.py                 # frontmatter, tamanho de skill, links,
-                                         # hooks apontando para scripts existentes,
-                                         # sintaxe dos scripts, bash 4 / GNU-ismos
-2. shellcheck .claude/scripts/*.sh
-3. GitHub Copilot code review            # revisor automático (ver 4.2)
-4. ler o incremento da descrição do PR   # falhar se ausente ou inválido
-```
+Dispara em `opened`, `reopened`, `synchronize` e **`edited`** — este último porque o
+incremento mora na descrição do PR e editá-la precisa revalidar.
+
+| Job | O que faz | Bloqueia? |
+|---|---|---|
+| `kit` | `tools/validate_kit.py`; `shellcheck -S error`; `shellcheck -S warning` informativo; `gdlint` no `bot_template.gd` | sim, exceto os warnings |
+| `increment` | Lê `Release: <tipo>` da descrição, com label `release:<tipo>` como fallback | sim |
+| `copilot` | Pede a review do Copilot via GraphQL | não (`continue-on-error`) |
+
+O `shellcheck` entra bloqueando só em `-S error` por enquanto: não foi possível rodá-lo
+localmente para confirmar que a base está limpa em nível de warning. O patamar sobe
+depois da primeira execução real mostrar o que de fato aparece.
+
+Um detalhe de segurança: a descrição do PR é entrada não confiável. Ela chega aos scripts
+por variável de ambiente, nunca interpolada direto no comando — `${{ }}` dentro de um
+`run:` é injeção de shell.
 
 ### 4.2 GitHub Copilot como validador
 
@@ -138,15 +145,29 @@ review dele não conta como aprovação para efeito de branch protection. Então
 Chamar o Copilot de "validador" sem essa distinção criaria a impressão de um gate que
 não existe. Ele é a segunda leitura; o gate é script.
 
-### 4.3 No merge em `main` — release
+### 4.3 `release.yml` — no merge em `main`
 
-```
-5. revalidar
-6. calcular a nova versão a partir da última tag e do incremento
-7. montar o zip com as pastas da §3 e um VERSION gerado
-8. criar a tag vX.Y.Z
-9. publicar a GitHub Release com o zip
-```
+Dispara em `pull_request: closed` com `merged == true`, e não em `push: main`. O motivo é
+prático: o evento de PR carrega a descrição, que é onde o incremento está declarado — um
+evento de push teria que ir procurar o PR correspondente ao commit de merge.
+
+1. Revalida sobre o resultado do merge, não sobre a head do PR
+2. Calcula a versão: última tag `v*` + incremento (sem tag → `v0.0.0`)
+3. Monta o zip com o payload da §3, `VERSION` gerado e `install.sh`
+4. **Checa que `docs/`, `tools/` e `.github/` não vazaram** para o pacote — a exclusão é
+   verificada, não assumida a partir da lista de cópia
+5. Cria a tag e publica a GitHub Release
+
+O asset chama-se `godot-4.zip` sem versão no nome, de propósito: mantém estável a URL
+`releases/latest/download/godot-4.zip`.
+
+### 4.4 `install.sh`
+
+Vai dentro do zip. Copia `skills/`, `commands/`, `agents/`, `scripts/` e `templates/` para
+o `.claude/` do projeto alvo e faz **merge** dos hooks no `settings.json` existente em vez
+de sobrescrevê-lo — um projeto Godot real provavelmente já tem hooks próprios. O merge
+identifica um grupo pelos scripts que ele roda, então reinstalar é no-op e um matcher
+editado à mão não é revertido em silêncio.
 
 ## 5. Decisões
 
@@ -154,7 +175,8 @@ não existe. Ele é a segunda leitura; o gate é script.
 |---|---|---|
 | D-R-01 | Parâmetro de incremento | **Linha `Release: <major\|minor\|patch>` na descrição do MR.** O pipeline aceita também uma label `release:<tipo>` como fallback — aditivo, não substitui |
 | D-R-02 | Marketplace / `plugin.json` | **Não se aplica.** O framework é um `.claude/`, não um plugin (D-P-01) |
-| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck` como gate duro, na abertura do PR** |
+| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck -S error` + `gdlint` como gate duro, na abertura do PR** |
+| D-R-08 | Patamar do shellcheck | **`-S error` bloqueia, `-S warning` informativo.** Sobe depois da primeira execução real |
 | D-R-04 | Forma de empacotamento | **Zip do payload da §3 como asset da GitHub Release, com `install.sh` que faz merge dos hooks** |
 | D-R-06 | GitHub Copilot na esteira | **Revisor automático do PR, guiado por `.github/copilot-instructions.md`.** Comenta, não reprova — o gate duro continua sendo script (§4.2) |
 | D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
