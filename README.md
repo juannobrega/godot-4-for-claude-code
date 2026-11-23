@@ -10,6 +10,7 @@ Claude Code.
 | Documento | Conteúdo |
 |---|---|
 | [docs/spec/kit-spec.md](docs/spec/kit-spec.md) | **A especificação do kit** — tese, princípios, artefatos, escada de verificação, comandos `/godot-4:*`, skills, agentes, hooks, riscos, levantamento de MCP servers, decisões em aberto |
+| [docs/spec/release-process.md](docs/spec/release-process.md) | Modelo de branches (`main` + `dev`), versionamento semver dirigido pela descrição do MR, e o que entra no pacote de release |
 | [docs/research/prior-art.md](docs/research/prior-art.md) | Levantamento de kits SDD (Spec Kit, Agent OS, BMAD) e de coleções de skills de Godot, com análise de lacunas |
 | [docs/research/godot-constraints.md](docs/research/godot-constraints.md) | Restrições técnicas verificadas do Godot 4 que determinam o desenho: `.tscn`/`.uid`, comandos headless, exit codes, armadilhas de CI, input simulado, trabalho paralelo |
 
@@ -25,3 +26,9 @@ Os kits de spec-driven existentes assumem user stories verificáveis por teste; 
 **mecânicas com números de tuning e feel que nenhum teste verifica**. O kit fecha essa
 distância com uma escada de verificação explícita (V0–V5), tuning como artefato de spec, e
 contratos de cena declarados antes de o `.tscn` existir.
+
+## Como trabalhamos neste repositório
+
+Duas branches, só. `dev` é onde o trabalho acontece; `main` é a branch principal e todo
+merge nela gera uma release, com o incremento (`major`/`minor`/`patch`) declarado na
+descrição do merge request. Detalhes em [docs/spec/release-process.md](docs/spec/release-process.md).

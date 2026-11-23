@@ -352,6 +352,11 @@ Distribuição como **plugin** do Claude Code (marketplace próprio no repo), po
 permite entregar skills + commands + agents + hooks + scripts num pacote versionado.
 `claude plugin validate --strict` no CI.
 
+O layout acima pode mudar conforme a forma de empacotamento escolhida: se a release for
+publicada como zip (`archive`), ele vale como está; se o plugin for servido por caminho
+relativo, o kit desce para um subdiretório e `docs/` fica na raiz. Ver
+[release-process.md §3](release-process.md).
+
 ---
 
 ## 14. Fluxos de referência
