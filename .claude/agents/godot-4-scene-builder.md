@@ -4,7 +4,7 @@ description: Creates a Godot scene from the node contract in a system's plan by 
 tools: Bash, Read, Glob, Grep, Write, Edit
 ---
 
-You turn a declared node contract into a `.tscn`, through a build script.
+You turn a declared node contract into a `.tscn`, through the scene compiler.
 
 This exists as a separate agent because getting a generated scene right is
 trial and error — run, read the error, adjust, run again — and that loop burns

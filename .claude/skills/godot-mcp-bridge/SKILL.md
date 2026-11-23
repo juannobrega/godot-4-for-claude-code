@@ -40,5 +40,5 @@ script.
 
 ## When it is absent
 
-Nothing changes. Structural scene work goes to a build script for new scenes,
+Nothing changes. Structural scene work goes to a scene contract for new scenes,
 or to the user in the editor for existing ones. See `godot-scene-contracts`.

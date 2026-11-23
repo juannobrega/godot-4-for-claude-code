@@ -40,7 +40,7 @@ Anything here that was not actually observed in the code is marked `(assumed)`.
 - No rung is skipped because the change "obviously works".
 - An acceptance criterion at V5 is closed by a human in `checks.md`. Never by an
   agent, never by inference from a passing test.
-- Structural edits to `.tscn`/`.tres` go through the editor or a build script.
+- Structural edits to `.tscn`/`.tres` go through the editor or a scene contract.
 
 ## Performance budget
 

@@ -276,7 +276,7 @@ Router-first. Só a `using-godot-4` descreve o mapa; as outras são carregadas s
 |---|---|---|
 | `using-godot-4` | meta/entrada: precedência entre skills, mapa de delegação | — |
 | `writing-game-specs` | escrever/revisar `spec.md`, ACs, degraus | templates, exemplos bons e ruins |
-| `godot-scene-contracts` | criar/alterar `.tscn`, build scripts, cirurgia segura | regras de uid/load_steps, template de build script |
+| `godot-scene-contracts` | criar/alterar `.tscn`, contratos de cena, cirurgia segura | regras de uid/load_steps, formato do contrato |
 | `godot-resource-tuning` | superfície de tuning, `@export`, `.tres`, custom resources | padrões de Resource, validação de faixa |
 | `godot4-api-guard` | qualquer escrita de GDScript | tabela 3→4, drift entre minors, detecção via `config/features` |
 | `gdscript-conventions` | escrita de `.gd` | tipagem estrita, nomes de sinal, `%UniqueName`, estrutura de arquivo |
@@ -312,7 +312,7 @@ mesmo conteúdo é mais barato como skill ou como script:
 | `auditor` | volume | Gap analysis spec↔código para o `converge` |
 | `spec-reviewer` | incentivo | Audita a spec antes de existir código: transição de estado faltando, critério no degrau errado, número que virará literal |
 | `test-writer` | isolamento + volume | Escreve testes V2/V3 a partir dos critérios, **sem ler a implementação** — senão testa o que o código faz, não o que foi prometido |
-| `scene-builder` | volume | Escreve e roda o build script até o `.tscn` carregar. Só cena nova; mudança estrutural em cena feita no editor volta como tarefa humana |
+| `scene-builder` | volume | Escreve o contrato e roda o compilador até o `.tscn` carregar. Só cena nova; mudança estrutural em cena feita no editor volta como tarefa humana |
 | `researcher` | volume | Resolve uma dúvida de API na *minor* exata do projeto e devolve só a conclusão |
 
 **O que deliberadamente não virou agente:** detecção de API do Godot 3 e conferência de
