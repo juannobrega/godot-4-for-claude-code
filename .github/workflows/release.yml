@@ -30,7 +30,7 @@ jobs:
       - name: Revalidate
         run: |
           python3 tools/validate_kit.py
-          shellcheck -x -S error .claude/scripts/*.sh install.sh
+          shellcheck -x -S warning .claude/scripts/*.sh install.sh
 
       - name: Compute the next version
         id: version

@@ -29,14 +29,9 @@ jobs:
       - name: Validate kit structure
         run: python3 tools/validate_kit.py
 
-      # Definite bugs block. Style and warning findings are reported but do not
-      # fail the build yet: the threshold tightens once the first real run shows
-      # what this codebase actually trips.
-      - name: ShellCheck (errors block)
-        run: shellcheck -x -S error .claude/scripts/*.sh install.sh
-
-      - name: ShellCheck (warnings, informational)
-        continue-on-error: true
+      # Warning level blocks: run 45187189794 confirmed the base is clean there,
+      # so anything new at this level is a regression this change introduced.
+      - name: ShellCheck
         run: shellcheck -x -S warning .claude/scripts/*.sh install.sh
 
       # The bot template is copied verbatim by users. Godot 3 API or a syntax

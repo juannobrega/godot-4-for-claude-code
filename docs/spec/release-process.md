@@ -111,13 +111,9 @@ incremento mora na descrição do PR e editá-la precisa revalidar.
 
 | Job | O que faz | Bloqueia? |
 |---|---|---|
-| `kit` | `tools/validate_kit.py`; `shellcheck -S error`; `shellcheck -S warning` informativo; `gdlint` no `bot_template.gd` | sim, exceto os warnings |
+| `kit` | `tools/validate_kit.py`; `shellcheck -S warning`; `gdlint` no `bot_template.gd` | sim |
 | `increment` | Lê `Release: <tipo>` da descrição, com label `release:<tipo>` como fallback | sim |
 | `copilot` | Pede a review do Copilot via GraphQL | não (`continue-on-error`) |
-
-O `shellcheck` entra bloqueando só em `-S error` por enquanto: não foi possível rodá-lo
-localmente para confirmar que a base está limpa em nível de warning. O patamar sobe
-depois da primeira execução real mostrar o que de fato aparece.
 
 Um detalhe de segurança: a descrição do PR é entrada não confiável. Ela chega aos scripts
 por variável de ambiente, nunca interpolada direto no comando — `${{ }}` dentro de um
@@ -175,8 +171,8 @@ editado à mão não é revertido em silêncio.
 |---|---|---|
 | D-R-01 | Parâmetro de incremento | **Linha `Release: <major\|minor\|patch>` na descrição do MR.** O pipeline aceita também uma label `release:<tipo>` como fallback — aditivo, não substitui |
 | D-R-02 | Marketplace / `plugin.json` | **Não se aplica.** O framework é um `.claude/`, não um plugin (D-P-01) |
-| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck -S error` + `gdlint` como gate duro, na abertura do PR** |
-| D-R-08 | Patamar do shellcheck | **`-S error` bloqueia, `-S warning` informativo.** Sobe depois da primeira execução real |
+| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck -S warning` + `gdlint` como gate duro, na abertura do PR** |
+| D-R-08 | Patamar do shellcheck | **`-S warning` bloqueia.** A execução 45187189794 confirmou a base limpa nesse nível, então um achado novo é regressão |
 | D-R-04 | Forma de empacotamento | **Zip do payload da §3 como asset da GitHub Release, com `install.sh` que faz merge dos hooks** |
 | D-R-06 | GitHub Copilot na esteira | **Revisor automático do PR, guiado por `.github/copilot-instructions.md`.** Comenta, não reprova — o gate duro continua sendo script (§4.2) |
 | D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
