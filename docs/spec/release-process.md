@@ -113,11 +113,27 @@ sobre contribuir com o framework, não sobre instalá-lo.
 
 Os dois instaladores copiam os diretórios para o projeto alvo e fazem **merge** dos hooks
 no `settings.json` existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já
-tem hooks próprios. Ambos **sobem a árvore procurando `project.godot`** em vez de usar o
-diretório atual: o default anterior instalava onde o shell estivesse, e como o `unzip`
-deixa o pacote na pasta atual, bastava um `cd` para o `.claude` ir para dentro do pacote,
-onde o Claude Code nunca olha. Também recusam o próprio diretório do pacote como destino,
-e recusam quando não existe projeto algum.
+tem hooks próprios.
+
+O destino tem três formas, e a escolha é explícita em duas delas:
+
+| Forma | Destino |
+|---|---|
+| sem argumento | sobe a árvore procurando `project.godot` |
+| `--here` / `-Here` | o diretório atual, sem procurar; pode estar vazio |
+| caminho posicional | o que foi apontado |
+
+O default anterior era o diretório atual, e como o `unzip` deixa o pacote na pasta atual,
+bastava um `cd` para o `.claude` ir para dentro do pacote, onde o Claude Code nunca olha.
+Subir a árvore conserta isso; a recusa do diretório do pacote é a segunda linha de defesa.
+
+**Instalar fora de um projeto Godot é permitido** e só gera aviso. Recusar seria
+severidade sem benefício: o framework foi desenhado para ficar inerte sem `project.godot`,
+então instalar numa pasta vazia é inútil, não perigoso — e bloquear impediria o caso
+legítimo de preparar a pasta antes do projeto existir.
+
+Um `settings.json` inválido no destino aborta **antes** de qualquer cópia, nos dois
+instaladores, para que uma falha não deixe meia instalação.
 
 A versão vive na tag e num `VERSION` dentro do pacote, gerado no build. Nada precisa ser
 commitado em `main` a cada release.

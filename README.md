@@ -58,11 +58,25 @@ script baixado da internet. Os hooks continuam sendo scripts bash e Python, ent�
 Windows precisa do Git for Windows (Git Bash) e de `python3` no PATH; o instalador avisa
 se algum dos dois faltar.
 
-O instalador **sobe a árvore até achar `project.godot`**, então qualquer subpasta do
-projeto serve; ele se recusa a instalar dentro do próprio pacote, e recusa quando não há
-projeto nenhum em vez de criar um `.claude` inútil. Faz **merge** dos hooks num
-`settings.json` que já exista, em vez de sobrescrever, e reinstalar é no-op. Use
-`--dry-run` (`-DryRun` no Windows) para ver o que ele faria sem escrever nada.
+### Três formas de escolher o destino
+
+| Comando | Onde instala |
+|---|---|
+| `install.sh` | **Sobe a árvore** até achar `project.godot` — qualquer subpasta do projeto serve |
+| `install.sh --here` | **Nesta pasta**, sem procurar nada. A pasta pode estar vazia |
+| `install.sh <path>` | No caminho que você apontar |
+
+No Windows, `-Here` e o caminho posicional. `--dry-run` (`-DryRun`) mostra o que seria
+escrito sem escrever. `--help` lista o resto.
+
+A única coisa que o instalador recusa é o **diretório do próprio pacote** — ali o
+`.claude` ficaria ao lado do instalador, onde o Claude Code nunca olha. Instalar numa
+pasta sem `project.godot` é permitido e só gera um aviso: o framework foi feito para
+ficar inerte até o projeto existir.
+
+Ele faz **merge** dos hooks num `settings.json` que já exista, em vez de sobrescrever, e
+reinstalar é no-op. Um `settings.json` inválido no destino aborta **antes** de copiar
+qualquer arquivo.
 
 Depois, dentro do projeto:
 
