@@ -2,7 +2,11 @@ name: Claude Review
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    # synchronize is included deliberately: without it a pull request is
+    # reviewed only in the state it was opened in, and later commits ship
+    # unreviewed. The action self-limits -- it skips drafts, changes it judges
+    # trivial, and pull requests that already carry a comment from Claude.
+    types: [opened, reopened, ready_for_review, synchronize]
     branches: [main]
 
 permissions:
