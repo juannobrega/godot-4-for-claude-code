@@ -14,7 +14,8 @@ Claude Code.
 │                          contexto da engine, baseline, verify-before-done
 ├── skills/                15 skills, roteadas por using-godot-4
 ├── commands/godot-4/      14 comandos  →  /godot-4:init, :specify, :verify …
-├── agents/                verifier · blind-qa · auditor
+├── agents/                7 agentes: verifier · blind-qa · auditor · spec-reviewer
+│                          test-writer · scene-builder · researcher
 ├── scripts/               escada de verificação, hooks, scaffolding, bot
 └── templates/             spec · plan · tasks · contract · constitution · config
 ```

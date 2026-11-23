@@ -29,7 +29,7 @@ Explicit. This is the section that stops the system from growing sideways.
 
 ## Tuning surface
 
-Becomes `{{SLUG}}_config.tres`. Every number a designer may want to change
+Becomes `{{SLUG}}_config.tres (class {{CLASS}}Config)`. Every number a designer may want to change
 belongs here and nowhere else.
 
 | ID | Type | Range | Default | Owner |

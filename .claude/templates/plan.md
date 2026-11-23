@@ -29,7 +29,7 @@ Creation route — pick one and say why:
 ## Resource schema
 
 ```gdscript
-class_name {{SLUG}}Config
+class_name {{CLASS}}Config
 extends Resource
 
 @export_range(0.0, 1.0) var example: float = 0.5

@@ -8,7 +8,7 @@ Anything here that was not actually observed in the code is marked `(assumed)`.
 
 ## Engine
 
-- Engine: 4.7.2
+- Engine: 4.7.2  <!-- keep in step with engine: in config.yml, which scripts read -->
 - Renderer: forward_plus
 - Language: GDScript only · C# is not used in this project
 
