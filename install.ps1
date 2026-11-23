@@ -75,9 +75,11 @@ if ($Here) {
   # subdirectory still installs in the right place. Falling back to the current
   # directory is deliberate -- the framework is inert without project.godot, so
   # installing here is useless rather than harmful.
-  $here = (Get-Location).Path
-  $Dest = Find-GodotProjectRoot $here
-  if (-not $Dest) { $Dest = $here; $NoProject = $true }
+  # Not $here: PowerShell variable names are case-insensitive, so that would
+  # assign a path string to the [switch]$Here parameter and throw.
+  $cwd  = (Get-Location).Path
+  $Dest = Find-GodotProjectRoot $cwd
+  if (-not $Dest) { $Dest = $cwd; $NoProject = $true }
 }
 
 # The package is never its own target: unzip drops it into the current folder,

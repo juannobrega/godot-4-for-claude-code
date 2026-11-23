@@ -131,6 +131,59 @@ def check_scripts():
             errors.append(f"{p.relative_to(ROOT)}: does not compile: {r.stderr.strip()}")
 
 
+def _strip_ps_comments(text):
+    """Drops PowerShell comments so prose about a variable is not read as code.
+
+    Handles line comments outside quotes and <# block comments #>. Good enough
+    for the collision scan: a false negative there is a missed finding, while a
+    false positive would flag documentation.
+    """
+    text = re.sub(r"<#.*?#>", "", text, flags=re.S)
+    out = []
+    for line in text.splitlines():
+        quote = None
+        for i, ch in enumerate(line):
+            if quote:
+                if ch == quote:
+                    quote = None
+            elif ch in "\"'":
+                quote = ch
+            elif ch == "#":
+                line = line[:i]
+                break
+        out.append(line)
+    return "\n".join(out)
+
+
+def check_powershell():
+    """PowerShell variable names are case-insensitive.
+
+    A local named `$here` therefore assigns to a `[switch]$Here` parameter, and
+    assigning a string to a switch throws. That shipped in v1.0.0 and broke the
+    no-argument install path on Windows entirely, so the check exists to stop a
+    reviewer's attention from being the only thing between it and a release.
+    """
+    for p in sorted(ROOT.glob("*.ps1")) + sorted((ROOT / "tools").glob("*.ps1")):
+        rel = p.relative_to(ROOT)
+        text = _strip_ps_comments(p.read_text())
+        # Parameters declared in a param(...) block, typed or not.
+        params = re.findall(r"^\s*(?:\[[\w.]+\]\s*)?\$(\w+)\s*[,)]", text, re.M)
+        if not params:
+            continue
+        seen = {}
+        for m in re.finditer(r"\$(\w+)", text):
+            seen.setdefault(m.group(1).lower(), set()).add(m.group(1))
+        for name in set(params):
+            others = seen.get(name.lower(), set()) - {name}
+            if others:
+                errors.append(
+                    f"{rel}: parameter ${name} is also spelled "
+                    f"{', '.join('$' + o for o in sorted(others))}; PowerShell "
+                    f"variable names are case-insensitive, so these are one "
+                    f"variable and the parameter is overwritten"
+                )
+
+
 def check_templates():
     for name in ("spec.md", "plan.md", "tasks.md", "contract.md",
                  "constitution.md", "config.yml"):
@@ -145,7 +198,7 @@ def check_templates():
 
 def main():
     for check in (check_skills, check_agents, check_commands,
-                  check_hooks, check_scripts, check_templates):
+                  check_hooks, check_scripts, check_powershell, check_templates):
         check()
     for w in warnings:
         print(f"warning: {w}")
