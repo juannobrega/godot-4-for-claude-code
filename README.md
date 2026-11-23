@@ -30,19 +30,27 @@ Este framework responde às três coisas.
 
 ## Instalação
 
+Rode **de dentro do seu projeto Godot**. O pacote vai para o diretório temporário, então
+nada sobra no projeto.
+
+**macOS / Linux**
+
 ```bash
-curl -LO https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.zip
-unzip godot-4.zip
-./godot-4/install.sh /caminho/do/seu-projeto-godot
+curl -fsSL https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.tar.gz | tar -xz -C /tmp
+/tmp/godot-4/install.sh
 ```
 
-No Windows, pelo PowerShell:
+**Windows (PowerShell)**
 
 ```powershell
-Invoke-WebRequest https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.zip -OutFile godot-4.zip
-Expand-Archive godot-4.zip -DestinationPath .
-powershell -ExecutionPolicy Bypass -File .\godot-4\install.ps1 C:\caminho\do\seu-projeto-godot
+Invoke-WebRequest https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.zip -OutFile $env:TEMP\godot-4.zip
+Expand-Archive $env:TEMP\godot-4.zip -DestinationPath $env:TEMP -Force
+powershell -ExecutionPolicy Bypass -File $env:TEMP\godot-4\install.ps1
 ```
+
+São dois assets com o **mesmo payload** — o que muda por plataforma é o formato, não o
+conteúdo: `unzip` não existe em Linux mínimo e `tar.gz` é estranho no Windows. Os dois
+instaladores vão dentro de ambos.
 
 O `install.ps1` roda no Windows PowerShell 5.1 e no PowerShell 7, sem depender de
 Python. O `-ExecutionPolicy Bypass` vale só para essa execução e evita o bloqueio de
@@ -50,8 +58,13 @@ script baixado da internet. Os hooks continuam sendo scripts bash e Python, ent�
 Windows precisa do Git for Windows (Git Bash) e de `python3` no PATH; o instalador avisa
 se algum dos dois faltar.
 
-O instalador faz **merge** dos hooks num `settings.json` que já exista, em vez de
-sobrescrever. Reinstalar é no-op. Depois, dentro do projeto:
+O instalador **sobe a árvore até achar `project.godot`**, então qualquer subpasta do
+projeto serve; ele se recusa a instalar dentro do próprio pacote, e recusa quando não há
+projeto nenhum em vez de criar um `.claude` inútil. Faz **merge** dos hooks num
+`settings.json` que já exista, em vez de sobrescrever, e reinstalar é no-op. Use
+`--dry-run` (`-DryRun` no Windows) para ver o que ele faria sem escrever nada.
+
+Depois, dentro do projeto:
 
 ```
 /godot-4:init
