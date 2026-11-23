@@ -1,0 +1,18 @@
+# .godotspec/config.yml — written by /godot-4:init, edited by hand afterwards.
+
+# Absolute path to the Godot binary. Leave empty to resolve from $GODOT_BIN,
+# then PATH, then the macOS app bundle.
+godot_bin: ""
+
+# Version this project is developed against. The session hook warns when the
+# binary does not match.
+engine: "4.7.2"
+
+# Test framework in use: gut | gdunit4 | none
+test_framework: "gut"
+test_dirs:
+  unit: "tests/unit"
+  integration: "tests/integration"
+
+# Highest rung run by default when /godot-4:verify is called with no argument.
+default_rung: "V3"
