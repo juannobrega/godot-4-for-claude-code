@@ -150,6 +150,8 @@ incremento mora na descrição do PR e editá-la precisa revalidar.
 | Job | O que faz | Bloqueia? |
 |---|---|---|
 | `kit` | `tools/validate_kit.py`; `shellcheck -S warning`; `gdlint` no `bot_template.gd` | sim |
+| `install-unix` | `tools/test_install_sh.sh` em ubuntu e macOS — bash 5 e bash 3.2 | sim |
+| `install-windows` | `tools/test_install_ps1.ps1` em PowerShell 5.1 e 7 | sim |
 | `install-windows` | `tools/test_install_ps1.ps1` em `windows-latest`, no Windows PowerShell 5.1 e no PowerShell 7: instalação limpa, reinstalação sem efeito, merge com hooks existentes e `settings.json` inválido abortando antes de copiar | sim |
 | `increment` | Lê `Release: <tipo>` da descrição, com label `release:<tipo>` como fallback | sim |
 | `review` (workflow `claude-review.yml`) | Review do Claude no PR, via `claude-code-action` | não |
@@ -176,9 +178,21 @@ As regras de review vivem em [`CLAUDE.md`](../../CLAUDE.md) na raiz, em um arqui
 `.github/copilot-instructions.md` ficou como ponteiro, para que habilitar o Copilot um
 dia não exija reescrever nada.
 
-**Limite que continua valendo:** o review comenta, não reprova. O gate duro é
-`validate.yml`. E quando o secret não existe, o job diz isso no resumo do PR em vez de
-passar em silêncio.
+**O review comenta, não reprova — e isso não é ajustável no workflow.** A action não
+devolve veredito com severidade: ela posta comentários e sai com sucesso. Não há sinal
+legível por máquina do tipo "achei 2 bugs reais" para o job reprovar em cima. Fazer o job
+falhar na simples presença de comentário reprovaria também em observação de estilo, e aí
+a saída de todo mundo passa a ser mergear com check vermelho — o que corrói todos os
+checks, não só este.
+
+O mecanismo certo para bloquear é outro: **exigir que as conversas do PR estejam
+resolvidas** antes do merge. Isso trava o merge enquanto houver achado em aberto, mas
+quem decide cada um é uma pessoa — resolver é um ato explícito, não um silêncio. Fica como
+**D-R-10**, porque é configuração de repositório e não de esteira.
+
+Hoje a `main` **não tem proteção nenhuma**: nem branch protection clássica nem ruleset. A
+regra de "só recebe PR vindo da dev" é honor system. Enquanto for assim, nada bloqueia
+nada — nem os gates duros.
 
 ### 4.3 `release.yml` — no merge em `main`
 
@@ -234,6 +248,8 @@ do Claude Code no Windows; isso continua sendo verificação manual.
 | D-R-04 | Forma de empacotamento | **Zip do payload da §3 como asset da GitHub Release, com `install.sh` que faz merge dos hooks** |
 | D-R-06 | Revisor de IA na esteira | **`claude-code-action` com token de assinatura**, não Copilot. O Copilot exige plano pago e não está disponível nesta conta (§4.2) |
 | D-R-09 | Onde vivem as regras de review | **`CLAUDE.md` na raiz**, arquivo único; `copilot-instructions.md` é ponteiro |
+| D-R-10 | Review do Claude deve bloquear o merge? | **Não pelo job.** Bloquear via *require conversation resolution* na proteção de branch, mais os gates duros como checks obrigatórios. Pendente: a `main` não tem proteção configurada |
+| D-R-11 | Cobertura de teste do instalador unix | **`tools/test_install_sh.sh` no job `install-unix`**, em ubuntu e macOS. Antes só o Windows tinha suíte, e foi por isso que dois bugs passaram |
 | D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
 | D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **Sim**, sem default implícito |
 | D-R-10 | Instalação no Windows | **`install.ps1` nativo em PowerShell**, sem Python, testado em `windows-latest` nos dois hosts. Os hooks seguem em bash e rodam pelo Git Bash |

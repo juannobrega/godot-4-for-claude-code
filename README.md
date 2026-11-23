@@ -84,6 +84,9 @@ Depois, dentro do projeto:
 /godot-4:init
 ```
 
+Para atualizar mais tarde, `/godot-4:update`: ele lê o changelog da release nova, mostra o
+que muda **neste** projeto, preserva o que você editou e remove o que saiu da versão.
+
 O `init` detecta a versão da engine, lê as convenções que o seu código **já usa** e
 propõe uma constituição a partir delas — em vez de impor um estilo de fora.
 
@@ -172,10 +175,10 @@ saem sem efeito** num diretório sem `project.godot`.
 | | |
 |---|---|
 | **15 skills** | roteadas por `using-godot-4`; carregue só a que a tarefa pede |
-| **14 comandos** | `/godot-4:init`, `:specify`, `:verify`, `:converge`, … |
+| **15 comandos** | `/godot-4:init`, `:specify`, `:verify`, `:converge`, `:update`, … |
 | **7 agentes** | `verifier` · `blind-qa` · `auditor` · `spec-reviewer` · `test-writer` · `scene-builder` · `researcher` |
 | **5 hooks** | a camada que impede, não só aconselha |
-| **6 templates** | spec · plan · tasks · contract · constitution · config |
+| **7 templates** | spec · plan · tasks · contract · constitution · config · CLAUDE.md |
 
 O teto de skills é deliberado. A metadata de toda skill instalada entra no system prompt
 no startup: bibliotecas de 100+ skills afogam o agente em descrições concorrentes.
@@ -192,6 +195,7 @@ sistema**, nunca por projeto.
 | | |
 |---|---|
 | [kit-spec.md](docs/spec/kit-spec.md) | A especificação do framework: tese, princípios, artefatos, escada, comandos, skills, agentes, hooks, riscos, decisões |
+| [update-and-memory.md](docs/spec/update-and-memory.md) | Como atualizar um projeto já instalado: manifesto, divisão entre script e julgamento, e memória de projeto via `CLAUDE.md` |
 | [release-process.md](docs/spec/release-process.md) | Branches, versionamento semver pela descrição do PR, empacotamento |
 | [prior-art.md](docs/research/prior-art.md) | Spec Kit, Agent OS, BMAD e as coleções de skills de Godot, com análise de lacunas |
 | [godot-constraints.md](docs/research/godot-constraints.md) | As restrições verificadas do Godot 4 que determinam o desenho |

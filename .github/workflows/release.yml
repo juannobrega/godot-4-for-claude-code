@@ -85,7 +85,7 @@ jobs:
           cp .claude/settings.json "$stage/.claude/"
           # INSTALL.md instead of the repository README: the README is about
           # contributing to this framework, not about installing it.
-          cp LICENSE install.sh install.ps1 "$stage/"
+          cp LICENSE install.sh install.ps1 installer.py "$stage/"
           echo "$VERSION" > "$stage/VERSION"
           chmod +x "$stage/install.sh" "$stage"/.claude/scripts/*.sh \
                    "$stage"/.claude/scripts/*.py
@@ -126,6 +126,12 @@ jobs:
 
           # Guard the exclusion rather than trusting the copy list above: a
           # correct list today starts leaking the day someone adds a directory.
+          # The installers delegate every file operation to installer.py, so a
+          # package without it cannot install at all.
+          for required in install.sh install.ps1 installer.py VERSION; do
+            [ -f "$stage/$required" ] || { echo "::error::$required missing from the package"; exit 1; }
+          done
+
           for unwanted in docs tools .github .git; do
             if [ -e "$stage/$unwanted" ]; then
               echo "::error::$unwanted leaked into the package"; exit 1

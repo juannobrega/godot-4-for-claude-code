@@ -61,7 +61,11 @@ try {
   foreach ($dir in $Payload) {
     $src = Join-Path $Repo ".claude\$dir"
     if (-not (Test-Path -LiteralPath $src)) { continue }
-    $want = @(Get-ChildItem -LiteralPath $src -Recurse -File -Force).Count
+    # Matching installer.py, which skips py_compile output: a working copy has
+    # __pycache__ beside the scripts and the user's project must not.
+    $want = @(Get-ChildItem -LiteralPath $src -Recurse -File -Force |
+              Where-Object { $_.Extension -ne '.pyc' -and
+                             $_.DirectoryName -notlike '*__pycache__*' }).Count
     $got  = @(Get-ChildItem -LiteralPath (Join-Path $fresh ".claude\$dir") -Recurse -File -Force).Count
     if ($want -ne $got) { Fail "fresh install: .claude/$dir has $got file(s), expected $want" }
   }

@@ -8,7 +8,10 @@ Anything here that was not actually observed in the code is marked `(assumed)`.
 
 ## Engine
 
-- Engine: 4.7.2  <!-- keep in step with engine: in config.yml, which scripts read -->
+<!-- Keep Engine in step with engine: in config.yml, which the scripts read.
+     Put annotations on their own line: session_context.sh reads the Engine
+     line to its end. -->
+- Engine: 4.7.2
 - Renderer: forward_plus
 - Language: GDScript only · C# is not used in this project
 

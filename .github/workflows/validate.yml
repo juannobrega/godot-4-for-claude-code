@@ -45,6 +45,22 @@ jobs:
   # works, so it runs where users run it, on both PowerShell hosts it supports:
   # fresh install, no-op reinstall, merge into existing hooks, and an invalid
   # settings.json aborting before anything is copied.
+  install-unix:
+    name: Unix installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS ships bash 3.2, Linux bash 5: the installer has to work on both.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run install.sh against throwaway projects
+        run: ./tools/test_install_sh.sh
+
   install-windows:
     name: Windows installer (${{ matrix.shell }})
     runs-on: windows-latest
