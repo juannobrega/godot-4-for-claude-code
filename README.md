@@ -192,6 +192,7 @@ sistema**, nunca por projeto.
 | | |
 |---|---|
 | [kit-spec.md](docs/spec/kit-spec.md) | A especificação do framework: tese, princípios, artefatos, escada, comandos, skills, agentes, hooks, riscos, decisões |
+| [update-and-memory.md](docs/spec/update-and-memory.md) | Como atualizar um projeto já instalado: manifesto, divisão entre script e julgamento, e memória de projeto via `CLAUDE.md` |
 | [release-process.md](docs/spec/release-process.md) | Branches, versionamento semver pela descrição do PR, empacotamento |
 | [prior-art.md](docs/research/prior-art.md) | Spec Kit, Agent OS, BMAD e as coleções de skills de Godot, com análise de lacunas |
 | [godot-constraints.md](docs/research/godot-constraints.md) | As restrições verificadas do Godot 4 que determinam o desenho |
