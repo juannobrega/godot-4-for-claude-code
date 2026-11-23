@@ -52,11 +52,14 @@ jobs:
       fail-fast: false
       matrix:
         shell: [powershell, pwsh]
+    # steps[*].shell does not accept expressions; defaults.run does.
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Run install.ps1 against throwaway projects
-        shell: ${{ matrix.shell }}
         run: ./tools/test_install_ps1.ps1
 
   increment:
