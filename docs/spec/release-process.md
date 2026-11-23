@@ -92,7 +92,7 @@ Três formas possíveis, confirmadas na [referência de marketplace](https://cod
 
 | Opção | `source` da entrada | `docs/` chega ao usuário? | Custo |
 |---|---|---|---|
-| **A — archive** | `{"source":"archive","url":"https://github.com/<owner>/<repo>/releases/download/v1.2.0/godot-4-1.2.0.zip","sha256":"<64 hex>"}` | **não** | Pipeline monta o zip, calcula o sha256 e atualiza a entrada |
+| **A — archive** | `{"source":"archive","url":".../releases/latest/download/godot-4.zip"}` | **não** | Pipeline monta o zip e publica a release. A entrada nunca muda (§3.3) |
 | **B — subdiretório** | `"./plugin"` (caminho relativo, resolvido a partir da raiz do marketplace) | sim, mas inerte — só `plugin/` é carregado | Reorganizar o repo: kit em `plugin/`, docs na raiz |
 | **C — repo inteiro** | `{"source":"github","repo":"<owner>/<repo>","ref":"v1.2.0"}` | sim | Nenhum — mas **não atende ao requisito** |
 
@@ -111,10 +111,35 @@ Com a opção A o `plugin.json` é **gerado no build**: o pipeline deriva a vers
 injeta no zip, sem commitar nada em `main`. Nenhum bypass de proteção, nenhuma divergência
 entre `main` e `dev`.
 
-Resta uma escrita: a entrada do `marketplace.json` precisa apontar para a URL e o sha256
-novos. Opções — manter o `marketplace.json` em outro lugar (repo separado ou branch de
-publicação), ou aceitar um único commit automatizado em `main` só para esse arquivo.
-Fica como **D-R-02**.
+### 3.3 Como o `marketplace.json` nunca precisa ser tocado
+
+O ponto fraco aparente da opção A seria ter que reescrever a URL do zip a cada release.
+Não precisa: o GitHub serve um endereço estável que redireciona para o asset da release
+mais recente.
+
+```json
+{
+  "name": "godot-4",
+  "source": {
+    "source": "archive",
+    "url": "https://github.com/juannobrega/godot-4-for-claude-code/releases/latest/download/godot-4.zip"
+  }
+}
+```
+
+Com o nome do asset fixo (`godot-4.zip`, sem versão embutida), a entrada é escrita **uma
+vez** e nunca mais. O pipeline só publica a release; nada é commitado em `main`, não há
+bypass de proteção, e `main` e `dev` jamais divergem.
+
+**O preço:** abrir mão do `sha256`. Ele é opcional — quando presente, o Claude Code recusa
+um download que não bata —, mas um digest fixo é incompatível com uma URL cujo conteúdo
+muda a cada release. Troca aceita: o repositório é de um mantenedor só, e a alternativa
+custa um commit automatizado em branch protegida a cada release.
+
+**A verificar antes de implementar:** que o cliente siga o redirect de
+`/releases/latest/download/` dentro dos limites de download de arquivos hospedados.
+Se não seguir, cai-se no plano B — URL versionada e um único commit automatizado em `main`
+restrito ao `marketplace.json`.
 
 ---
 
@@ -133,8 +158,16 @@ Disparado por: merge de MR em `main`.
 8. atualizar a entrada do marketplace.json  (ver D-R-02)
 ```
 
-Gate adicional a considerar: rodar os casos de `evals/` com `claude plugin eval` antes de
-publicar. Fica como **D-R-03**.
+### 4.1 Onde o eval roda
+
+`claude plugin eval` **não** entra no pipeline de release: rodar os casos depois do merge é
+tarde demais, a release já está acontecendo. O eval é gate do **MR**, junto com o
+`validate --strict`. O pipeline de `main` revalida e publica.
+
+```
+MR (dev → main):   claude plugin validate --strict  +  claude plugin eval  +  lint de scripts
+merge em main:     revalida, empacota, taggeia, publica
+```
 
 ---
 
@@ -142,8 +175,11 @@ publicar. Fica como **D-R-03**.
 
 | # | Decisão | Estado |
 |---|---|---|
-| D-R-01 | Parâmetro de incremento: linha `Release: <major\|minor\|patch>` na descrição do MR vs. label | **Descrição**, conforme pedido. Label registrada como alternativa |
-| D-R-02 | Onde vive o `marketplace.json` e quem o atualiza a cada release | **em aberto** |
-| D-R-03 | `claude plugin eval` como gate de release | **em aberto** |
-| D-R-04 | Forma de empacotamento | **Opção A (archive)** recomendada; a decidir |
-| D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **sim**, sem default implícito |
+| D-R-01 | Parâmetro de incremento | **Linha `Release: <major\|minor\|patch>` na descrição do MR.** O pipeline aceita também uma label `release:<tipo>` como fallback — aditivo, não substitui |
+| D-R-02 | Onde vive o `marketplace.json` e quem o atualiza | **`.claude-plugin/marketplace.json` no repo, apontando para a URL `releases/latest/download/`. Nunca é atualizado pelo pipeline** (§3.3) |
+| D-R-03 | `claude plugin eval` como gate | **Gate do MR, não do release** (§4.1) |
+| D-R-04 | Forma de empacotamento | **Opção A — archive** |
+| D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **Sim**, sem default implícito |
+
+Tarefa de verificação pendente antes de implementar: confirmar que o cliente segue o
+redirect de `/releases/latest/download/` (§3.3).

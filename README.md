@@ -9,7 +9,7 @@ Claude Code.
 
 | Documento | Conteúdo |
 |---|---|
-| [docs/spec/kit-spec.md](docs/spec/kit-spec.md) | **A especificação do kit** — tese, princípios, artefatos, escada de verificação, comandos `/godot-4:*`, skills, agentes, hooks, riscos, levantamento de MCP servers, decisões em aberto |
+| [docs/spec/kit-spec.md](docs/spec/kit-spec.md) | **A especificação do kit** — tese, princípios, artefatos, escada de verificação, comandos `/godot-4:*`, skills, agentes, hooks, riscos, levantamento de MCP servers, decisões |
 | [docs/spec/release-process.md](docs/spec/release-process.md) | Modelo de branches (`main` + `dev`), versionamento semver dirigido pela descrição do MR, e o que entra no pacote de release |
 | [docs/research/prior-art.md](docs/research/prior-art.md) | Levantamento de kits SDD (Spec Kit, Agent OS, BMAD) e de coleções de skills de Godot, com análise de lacunas |
 | [docs/research/godot-constraints.md](docs/research/godot-constraints.md) | Restrições técnicas verificadas do Godot 4 que determinam o desenho: `.tscn`/`.uid`, comandos headless, exit codes, armadilhas de CI, input simulado, trabalho paralelo |

@@ -405,18 +405,18 @@ relativo, o kit desce para um subdiretório e `docs/` fica na raiz. Ver
 - Metadata total das skills ≤ ~1.500 tokens no startup.
 - `claude plugin validate --strict` limpo.
 
-## 17. Decisões em aberto
+## 17. Decisões
 
 | # | Decisão | Default proposto |
 |---|---|---|
-| D-P-01 | Distribuição: plugin com marketplace próprio vs. `.claude/` copiável | **Plugin** (permite hooks) |
-| D-P-02 | Framework de teste padrão | **GUT** (headless sem fricção; gdUnit4 suportado como alternativa) |
-| D-P-03 | MCP de Godot: obrigatório, opcional ou ausente | **Opcional**, com `tugcantopaloglu/godot-mcp` como alvo de integração (§18) |
-| D-P-04 | Idioma do conteúdo do kit (skills/commands) | **Inglês** no kit, docs em PT-BR |
+| D-P-01 | Distribuição: plugin com marketplace próprio vs. `.claude/` copiável | **Plugin.** É o único formato que entrega hooks, e sem os hooks o guard de `.tscn` e o verify-before-done não existem · *decidido* |
+| D-P-02 | Framework de teste padrão | **GUT.** Roda headless sem flag extra, exit code binário, JUnit XML. gdUnit4 suportado como alternativa para quem precisa do scene runner · *decidido* |
+| D-P-03 | MCP de Godot: obrigatório, opcional ou ausente | **Opcional**, com `tugcantopaloglu/godot-mcp` como alvo de integração (§18) · *decidido* |
+| D-P-04 | Idioma do conteúdo do kit (skills/commands) | **Inglês** no kit, docs em PT-BR. A `description` da skill é o que decide o match no startup, e o vocabulário técnico do Godot e do ecossistema é inglês · *decidido* |
 | D-P-05 | Escopo 2D, 3D ou ambos no v1 | **Agnóstico a 2D/3D e a gênero** · *decidido* |
 | D-P-08 | Perfil de projeto (longo prazo / game jam) | **Sem perfis.** Processo único, scale-free (P9, §19) · *decidido* |
 | D-P-09 | Caso de validação | **Jogo pequeno completo, em projeto separado** · *decidido* |
-| D-P-06 | Política de `.tscn`: híbrida vs. build-script-only | **Híbrida** (§7) |
+| D-P-06 | Política de `.tscn`: híbrida vs. build-script-only | **Híbrida** (§7). Build-script-only quebraria em projeto que já tem cenas feitas no editor — e esse é o caso normal · *decidido* |
 | D-P-07 | Nome do plugin / prefixo de comando | **`godot-4`** → `/godot-4:<cmd>` · *decidido* |
 
 ---
