@@ -45,7 +45,7 @@ jobs:
             echo "::warning::Claude review skipped: CLAUDE_CODE_OAUTH_TOKEN is not set."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.guard.outputs.present == 'true'
         with:
           fetch-depth: 1
