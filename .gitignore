@@ -1,0 +1,4 @@
+.claude/settings.local.json
+.godotspec/evidence/
+*.pyc
+__pycache__/
