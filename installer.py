@@ -254,10 +254,14 @@ def main():
                                        args.force)
     print(f"  settings.json: {added} hook group(s) added, {removed} replaced")
 
+    # A conflict is only excluded when it was kept. With --force the package
+    # version was written, so the file is ours again and must be recorded --
+    # otherwise a later release that removes it leaves a permanent orphan.
+    unmanaged = set() if args.force else set(plan["conflict"])
     delivered = {rel: digest(os.path.join(dest_base, rel))
                  for rel in src_files
                  if os.path.exists(os.path.join(dest_base, rel))
-                 and rel not in plan["conflict"]}
+                 and rel not in unmanaged}
     with open(os.path.join(dest_base, MANIFEST), "w") as fh:
         json.dump({"version": args.version,
                    "installed_at": datetime.now(timezone.utc)

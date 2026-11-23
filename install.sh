@@ -124,17 +124,18 @@ fi
 VERSION="unknown"
 [ -f "$SRC/VERSION" ] && VERSION="$(tr -d ' \r\n' < "$SRC/VERSION")"
 
-ARGS="--src $SRC --dest $DEST --version $VERSION"
-[ "$DRY_RUN" -eq 1 ] && ARGS="$ARGS --dry-run"
-[ "$FORCE" -eq 1 ] && ARGS="$ARGS --force"
+# An array, not a string: "~/My Games/proj" word-splits otherwise and the
+# install fails outright. This is the "quote every path" rule in CLAUDE.md.
+ARGS=(--src "$SRC" --dest "$DEST" --version "$VERSION")
+[ "$DRY_RUN" -eq 1 ] && ARGS+=(--dry-run)
+[ "$FORCE" -eq 1 ] && ARGS+=(--force)
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "error: python3 is required, both to install and by the hooks." >&2
   exit 1
 fi
 
-# shellcheck disable=SC2086
-python3 "$SRC/installer.py" $ARGS || exit 1
+python3 "$SRC/installer.py" "${ARGS[@]}" || exit 1
 [ "$DRY_RUN" -eq 1 ] && exit 0
 
 chmod +x "$DEST"/.claude/scripts/*.sh "$DEST"/.claude/scripts/*.py 2>/dev/null || true
