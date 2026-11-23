@@ -33,6 +33,10 @@ failure behaviour matter more than elegance.
   `GODOT4_GUARD_OFF`, `require_verify.sh` honours `GODOT4_VERIFY_OFF`. A new
   blocking hook without one is a defect.
 - **Quote every path.** `"$CLAUDE_PROJECT_DIR"`, `"$GODOT_BIN"`.
+- **PowerShell variable names are case-insensitive.** A local named `$here`
+  assigns to a `[switch]$Here` parameter and throws. `validate_kit.py` checks
+  for this, but flag it on sight: it broke the no-argument install on Windows
+  in v1.0.0.
 - The `Stop` hook must respect `stop_hook_active` or it loops forever.
 
 ## Verification logic

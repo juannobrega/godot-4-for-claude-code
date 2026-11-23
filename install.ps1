@@ -6,9 +6,12 @@
 .DESCRIPTION
   Windows counterpart of install.sh, with the same contract:
 
-    .\install.ps1                      install into the Godot project you are in
-    .\install.ps1 <project-dir>        install into that project
-    .\install.ps1 -DryRun              show what would be written, write nothing
+    .\install.ps1                   install into the Godot project you are in,
+                                    found by walking up from here
+    .\install.ps1 -Here             install into this directory, no searching;
+                                    the directory may be empty
+    .\install.ps1 <project-dir>     install into that directory
+    .\install.ps1 -DryRun           print what would be written, write nothing
 
   Copies skills, commands, agents, scripts and templates into <target>\.claude\
   and MERGES the hooks into an existing settings.json rather than replacing it:
@@ -26,6 +29,8 @@ param(
   [Parameter(Position = 0)]
   [string]$Target,
 
+  [switch]$Here,
+
   [switch]$DryRun
 )
 
@@ -33,6 +38,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $Src = $PSScriptRoot
+$NoProject = $false
 
 # Walk up for project.godot so the installer works from any subdirectory of the
 # project. Defaulting to the current directory installed wherever the shell
@@ -47,7 +53,15 @@ function Find-GodotProjectRoot([string]$Start) {
   }
 }
 
-if (-not [string]::IsNullOrWhiteSpace($Target)) {
+if ($Here) {
+  if (-not [string]::IsNullOrWhiteSpace($Target)) { throw '-Here takes no target' }
+  # Explicit intent: this directory, whatever is in it. No searching upward,
+  # because the point of the switch is that the answer is not up for inference.
+  $Dest = (Get-Location).Path
+  if (-not (Test-Path -LiteralPath (Join-Path $Dest 'project.godot') -PathType Leaf)) {
+    $NoProject = $true
+  }
+} elseif (-not [string]::IsNullOrWhiteSpace($Target)) {
   if (-not (Test-Path -LiteralPath $Target -PathType Container)) {
     throw "not a directory: $Target"
   }
@@ -57,12 +71,15 @@ if (-not [string]::IsNullOrWhiteSpace($Target)) {
     Write-Warning 'The framework installs, but every hook stays inert until it does.'
   }
 } else {
-  $Dest = Find-GodotProjectRoot (Get-Location).Path
-  if (-not $Dest) {
-    throw ("no project.godot in {0} or any directory above it. Run this from " +
-           "inside your Godot project, or name it: .\install.ps1 C:\path\to\project" `
-           -f (Get-Location).Path)
-  }
+  # No target: prefer the project root above us, so running from a
+  # subdirectory still installs in the right place. Falling back to the current
+  # directory is deliberate -- the framework is inert without project.godot, so
+  # installing here is useless rather than harmful.
+  # Not $here: PowerShell variable names are case-insensitive, so that would
+  # assign a path string to the [switch]$Here parameter and throw.
+  $cwd  = (Get-Location).Path
+  $Dest = Find-GodotProjectRoot $cwd
+  if (-not $Dest) { $Dest = $cwd; $NoProject = $true }
 }
 
 # The package is never its own target: unzip drops it into the current folder,
@@ -72,9 +89,32 @@ $destNorm = $Dest.TrimEnd('\', '/')
 if ($destNorm -eq $srcNorm -or
     $destNorm.StartsWith($srcNorm + [System.IO.Path]::DirectorySeparatorChar,
                          [System.StringComparison]::OrdinalIgnoreCase)) {
+  # Two different mistakes land here, and they need different advice.
+  if (Test-Path -LiteralPath (Join-Path $Src 'tools\validate_kit.py') -PathType Leaf) {
+    throw ("$Dest is the godot-4 framework repository, so there is nothing to " +
+           "install: its .claude/ is the source this installer copies from. To " +
+           "install into a game, name it: .\install.ps1 C:\path\to\your-godot-project")
+  }
   throw ("$Dest is inside the godot-4 package, not a Godot project. Installing " +
          "there would put .claude next to the installer. Run the installer from " +
          "your project instead: cd C:\path\to\project; $Src\install.ps1")
+}
+
+# Now that the destination is settled, explain it.
+if ($NoProject -and $Here) {
+  # The switch said "here", so this is a note, not a correction.
+  Write-Host "note: $Dest has no project.godot yet; hooks stay inert until it does."
+} elseif ($NoProject) {
+  Write-Warning "no project.godot in $Dest or any directory above it."
+  if ((Test-Path -LiteralPath (Join-Path $Dest '.claude\skills\using-godot-4') -PathType Container) -and
+      (Test-Path -LiteralPath (Join-Path $Dest 'tools\validate_kit.py') -PathType Leaf)) {
+    Write-Warning 'This looks like the godot-4 framework repository itself, not a game.'
+  }
+  Write-Warning 'Installing here anyway; hooks stay inert until project.godot exists.'
+  Write-Warning 'To be explicit use -Here; to install into a game, name it:'
+  Write-Warning '  .\install.ps1 C:\path\to\your-godot-project'
+} elseif ([string]::IsNullOrWhiteSpace($Target) -and -not $Here -and $Dest -ne (Get-Location).Path) {
+  Write-Host "found project root at $Dest"
 }
 
 $SrcClaude    = Join-Path $Src '.claude'

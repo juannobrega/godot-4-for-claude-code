@@ -6,6 +6,7 @@
 #   2. reinstall is a no-op
 #   3. a project's own hooks and settings survive the merge
 #   4. an invalid settings.json aborts before anything is copied
+#   5. the three destination forms: no argument, -Here, explicit path
 #
 # Exits non-zero on the first failed check.
 
@@ -126,5 +127,46 @@ try {
 finally {
   Remove-Item -LiteralPath $Root -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+  # 5. Destination forms ---------------------------------------------------
+  # The no-argument path is the one a shadowed parameter breaks, and it was
+  # uncovered when exactly that bug shipped.
+  $nested = Join-Path $Root 'walkup'
+  New-Item -ItemType Directory -Force -Path (Join-Path $nested 'scenes\player') | Out-Null
+  New-Item -ItemType File -Force -Path (Join-Path $nested 'project.godot') | Out-Null
+  Push-Location (Join-Path $nested 'scenes\player')
+  try { & $Installer } finally { Pop-Location }
+  if (-not (Test-Path -LiteralPath (Join-Path $nested '.claude\settings.json') -PathType Leaf)) {
+    Fail 'no argument: did not install at the project root found by walking up'
+  }
+  if (Test-Path -LiteralPath (Join-Path $nested 'scenes\player\.claude') -PathType Container) {
+    Fail 'no argument: installed in the current directory instead of the project root'
+  }
+  Write-Host 'ok  no argument walks up to the project root'
+
+  # -Here must not search, and must accept a directory with no project.godot.
+  $empty = Join-Path $Root 'empty'
+  New-Item -ItemType Directory -Force -Path $empty | Out-Null
+  Push-Location $empty
+  try { & $Installer -Here } finally { Pop-Location }
+  if (-not (Test-Path -LiteralPath (Join-Path $empty '.claude\settings.json') -PathType Leaf)) {
+    Fail '-Here: did not install into the current directory'
+  }
+  Write-Host 'ok  -Here installs into an empty directory'
+
+  # -Here inside a project must stay put rather than walk up.
+  $sub = Join-Path $nested 'scenes'
+  Push-Location $sub
+  try { & $Installer -Here } finally { Pop-Location }
+  if (-not (Test-Path -LiteralPath (Join-Path $sub '.claude\settings.json') -PathType Leaf)) {
+    Fail '-Here: walked up instead of staying in the current directory'
+  }
+  Write-Host 'ok  -Here does not walk up'
+
+  # Contradictory intent must be rejected, not silently resolved.
+  $threw = $false
+  try { & $Installer -Here $nested 2>$null } catch { $threw = $true }
+  if (-not $threw) { Fail '-Here with a target should be rejected' }
+  Write-Host 'ok  -Here with a target is rejected'
 
 Write-Host 'install.ps1: all checks passed'
