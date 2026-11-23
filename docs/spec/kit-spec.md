@@ -345,7 +345,8 @@ godot-4-for-claude-code/
 │   ├── agents/*.md             # verifier, blind-qa, auditor
 │   ├── scripts/*.sh|*.py|*.gd  # hooks, escada de verificação, scaffolding
 │   └── templates/              # spec, plan, tasks, contract, constitution, config
-├── .github/copilot-instructions.md
+├── CLAUDE.md                   # regras de review, lidas pelo Claude
+├── .github/workflows/          # validate · claude-review · release
 ├── tools/validate_kit.py       # gate de CI; não vai para o usuário
 └── docs/                       # pesquisa e especificação; não vai para o usuário
 ```

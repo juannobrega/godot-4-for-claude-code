@@ -4,7 +4,7 @@ Kit de **spec-driven development** para desenvolvimento de jogos em **Godot 4** 
 Claude Code.
 
 > **Status:** framework construído em [`.claude/`](.claude), especificação em `docs/`.
-> A esteira de CI/CD ainda não existe.
+> Esteira em `.github/workflows/`: valida na abertura do PR, publica release no merge.
 
 ## O que tem aqui
 
@@ -19,7 +19,8 @@ Claude Code.
 └── templates/             spec · plan · tasks · contract · constitution · config
 ```
 
-Para usar num projeto Godot: copie `.claude/` para o projeto e rode `/godot-4:init`.
+Para usar num projeto Godot: baixe o `godot-4.zip` da última release, rode
+`./install.sh <seu-projeto>` e depois `/godot-4:init`. Ou copie `.claude/` à mão.
 Fora de um projeto com `project.godot`, todos os hooks saem sem efeito.
 
 ## Documentos

@@ -1,0 +1,79 @@
+name: Validate
+
+# Runs on the pull request into main, not on every push to dev. dev is free to
+# carry broken intermediate commits; validation happens where it decides
+# something. "edited" is included because the release increment lives in the
+# pull request description.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  kit:
+    name: Kit structure and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # frontmatter, skill size, broken links, hooks pointing at scripts that
+      # exist and are executable, script syntax, bash 4 and GNU-only constructs
+      - name: Validate kit structure
+        run: python3 tools/validate_kit.py
+
+      # Warning level blocks: run 45187189794 confirmed the base is clean there,
+      # so anything new at this level is a regression this change introduced.
+      - name: ShellCheck
+        run: shellcheck -x -S warning .claude/scripts/*.sh install.sh
+
+      # The bot template is copied verbatim by users. Godot 3 API or a syntax
+      # error here propagates into every project that adopts the kit.
+      - name: Lint shipped GDScript
+        run: |
+          pip install --quiet gdtoolkit
+          gdlint .claude/scripts/bot_template.gd
+
+  increment:
+    name: Release increment declared
+    runs-on: ubuntu-latest
+    steps:
+      # The body is untrusted input, so it is passed through the environment
+      # and never interpolated into the shell command itself.
+      - name: Read the increment from the pull request
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+        run: |
+          increment="$(printf '%s' "$PR_BODY" \
+            | grep -ioE '^Release:[[:space:]]*(major|minor|patch)[[:space:]]*$' \
+            | head -1 | tr -d ' \r' | cut -d: -f2 | tr 'A-Z' 'a-z')"
+
+          # Fallback: a release:<type> label. Additive; the description wins.
+          if [ -z "$increment" ]; then
+            for label in $PR_LABELS; do
+              case "$label" in
+                release:major|release:minor|release:patch)
+                  increment="${label#release:}" ;;
+              esac
+            done
+          fi
+
+          if [ -z "$increment" ]; then
+            echo "::error::No release increment declared."
+            echo "Add a line to the pull request description:"
+            echo "    Release: minor"
+            echo "Accepted: major | minor | patch. Or apply a release:<type> label."
+            echo "There is no implicit default: a silent patch bump hides a decision"
+            echo "nobody made."
+            exit 1
+          fi
+          echo "increment: $increment"
+          echo "### Release increment: \`$increment\`" >> "$GITHUB_STEP_SUMMARY"

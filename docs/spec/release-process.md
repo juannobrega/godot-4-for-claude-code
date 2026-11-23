@@ -1,8 +1,7 @@
 # Branches, versionamento e release
 
-**Status:** modelo de branches em vigor · pipeline é **trabalho futuro**, não implementar ainda.
-`.github/copilot-instructions.md` já existe: é inerte sem a esteira, e é o que torna a
-review do Copilot específica deste kit quando ela for ligada.
+**Status:** implementado. Branches em vigor, esteira em
+[`.github/workflows/`](../../.github/workflows).
 
 Repositório: `github.com/juannobrega/godot-4-for-claude-code`. O usuário fala em *merge
 request*; no GitHub o equivalente é **pull request**. Neste documento: **MR**.
@@ -101,52 +100,70 @@ existente em vez de sobrescrevê-lo — um projeto Godot provavelmente já tem h
 A versão vive na tag e num `VERSION` dentro do zip, gerado no build. Nada precisa ser
 commitado em `main` a cada release.
 
-## 4. Esboço do pipeline (não implementar ainda)
+## 4. A esteira
 
 Duas etapas, em momentos diferentes.
 
-### 4.1 Na abertura do PR `dev → main` — validação
+### 4.1 `validate.yml` — na abertura do PR `dev → main`
 
-```
-1. tools/validate_kit.py                 # frontmatter, tamanho de skill, links,
-                                         # hooks apontando para scripts existentes,
-                                         # sintaxe dos scripts, bash 4 / GNU-ismos
-2. shellcheck .claude/scripts/*.sh
-3. GitHub Copilot code review            # revisor automático (ver 4.2)
-4. ler o incremento da descrição do PR   # falhar se ausente ou inválido
-```
+Dispara em `opened`, `reopened`, `synchronize` e **`edited`** — este último porque o
+incremento mora na descrição do PR e editá-la precisa revalidar.
 
-### 4.2 GitHub Copilot como validador
+| Job | O que faz | Bloqueia? |
+|---|---|---|
+| `kit` | `tools/validate_kit.py`; `shellcheck -S warning`; `gdlint` no `bot_template.gd` | sim |
+| `increment` | Lê `Release: <tipo>` da descrição, com label `release:<tipo>` como fallback | sim |
+| `review` (workflow `claude-review.yml`) | Review do Claude no PR, via `claude-code-action` | não |
 
-O Copilot é adicionado como revisor automático do PR, guiado por
-[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md). Sem esse
-arquivo ele revisaria shell e Markdown genéricos; com ele, revisa contra as regras que
-este kit realmente tem — bash 3.2 do macOS, GNU-ismos, hooks que precisam sair sem efeito
-fora de um projeto Godot, hook bloqueante sem escape hatch, os cinco modos de falso-verde
-do `verify.sh`, e API do Godot 3 vazando para exemplos que o usuário vai copiar.
+Um detalhe de segurança: a descrição do PR é entrada não confiável. Ela chega aos scripts
+por variável de ambiente, nunca interpolada direto no comando — `${{ }}` dentro de um
+`run:` é injeção de shell.
 
-**Limite a registrar antes de montar a esteira:** o Copilot code review **comenta, não
-reprova**. Ele não produz um check de status que a proteção de branch possa exigir, e a
-review dele não conta como aprovação para efeito de branch protection. Então:
+### 4.2 Revisor de IA: Claude, não Copilot
 
-- **Gate duro** = `validate_kit.py` + `shellcheck` + o parsing do incremento. São eles
-  que reprovam o merge.
-- **Copilot** = revisor cuja saída é lida antes do merge. Para torná-lo semi-bloqueante,
-  a opção é exigir que conversas do PR estejam resolvidas na proteção de branch — o que
-  obriga a responder cada comentário dele, mas também aos comentários humanos.
+`claude-review.yml` roda o plugin oficial `code-review` via `claude-code-action`,
+autenticado com `CLAUDE_CODE_OAUTH_TOKEN` — token de assinatura gerado por
+`claude setup-token`, válido em Pro, Max, Ultra, Team e Enterprise. Com ele os runs
+saem na assinatura em vez de billing de API.
 
-Chamar o Copilot de "validador" sem essa distinção criaria a impressão de um gate que
-não existe. Ele é a segunda leitura; o gate é script.
+**Por que não o Copilot.** O Copilot code review exige plano pago a partir do Pro
+($10/mês) e, desde 01/06/2026, consome AI credits por review. Na conta deste repositório
+ele não está disponível: `suggestedActors` não retorna o bot e a REST responde
+422 "Reviews may only be requested from collaborators". O job que pedia a review foi
+**removido** — ele ficava verde sem ter feito nada, que é exatamente o gate desonesto
+que este kit existe para impedir.
 
-### 4.3 No merge em `main` — release
+As regras de review vivem em [`CLAUDE.md`](../../CLAUDE.md) na raiz, em um arquivo só.
+`.github/copilot-instructions.md` ficou como ponteiro, para que habilitar o Copilot um
+dia não exija reescrever nada.
 
-```
-5. revalidar
-6. calcular a nova versão a partir da última tag e do incremento
-7. montar o zip com as pastas da §3 e um VERSION gerado
-8. criar a tag vX.Y.Z
-9. publicar a GitHub Release com o zip
-```
+**Limite que continua valendo:** o review comenta, não reprova. O gate duro é
+`validate.yml`. E quando o secret não existe, o job diz isso no resumo do PR em vez de
+passar em silêncio.
+
+### 4.3 `release.yml` — no merge em `main`
+
+Dispara em `pull_request: closed` com `merged == true`, e não em `push: main`. O motivo é
+prático: o evento de PR carrega a descrição, que é onde o incremento está declarado — um
+evento de push teria que ir procurar o PR correspondente ao commit de merge.
+
+1. Revalida sobre o resultado do merge, não sobre a head do PR
+2. Calcula a versão: última tag `v*` + incremento (sem tag → `v0.0.0`)
+3. Monta o zip com o payload da §3, `VERSION` gerado e `install.sh`
+4. **Checa que `docs/`, `tools/` e `.github/` não vazaram** para o pacote — a exclusão é
+   verificada, não assumida a partir da lista de cópia
+5. Cria a tag e publica a GitHub Release
+
+O asset chama-se `godot-4.zip` sem versão no nome, de propósito: mantém estável a URL
+`releases/latest/download/godot-4.zip`.
+
+### 4.4 `install.sh`
+
+Vai dentro do zip. Copia `skills/`, `commands/`, `agents/`, `scripts/` e `templates/` para
+o `.claude/` do projeto alvo e faz **merge** dos hooks no `settings.json` existente em vez
+de sobrescrevê-lo — um projeto Godot real provavelmente já tem hooks próprios. O merge
+identifica um grupo pelos scripts que ele roda, então reinstalar é no-op e um matcher
+editado à mão não é revertido em silêncio.
 
 ## 5. Decisões
 
@@ -154,9 +171,11 @@ não existe. Ele é a segunda leitura; o gate é script.
 |---|---|---|
 | D-R-01 | Parâmetro de incremento | **Linha `Release: <major\|minor\|patch>` na descrição do MR.** O pipeline aceita também uma label `release:<tipo>` como fallback — aditivo, não substitui |
 | D-R-02 | Marketplace / `plugin.json` | **Não se aplica.** O framework é um `.claude/`, não um plugin (D-P-01) |
-| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck` como gate duro, na abertura do PR** |
+| D-R-03 | Validação automatizada | **`tools/validate_kit.py` + `shellcheck -S warning` + `gdlint` como gate duro, na abertura do PR** |
+| D-R-08 | Patamar do shellcheck | **`-S warning` bloqueia.** A execução 45187189794 confirmou a base limpa nesse nível, então um achado novo é regressão |
 | D-R-04 | Forma de empacotamento | **Zip do payload da §3 como asset da GitHub Release, com `install.sh` que faz merge dos hooks** |
-| D-R-06 | GitHub Copilot na esteira | **Revisor automático do PR, guiado por `.github/copilot-instructions.md`.** Comenta, não reprova — o gate duro continua sendo script (§4.2) |
+| D-R-06 | Revisor de IA na esteira | **`claude-code-action` com token de assinatura**, não Copilot. O Copilot exige plano pago e não está disponível nesta conta (§4.2) |
+| D-R-09 | Onde vivem as regras de review | **`CLAUDE.md` na raiz**, arquivo único; `copilot-instructions.md` é ponteiro |
 | D-R-07 | Quando a esteira roda | **Na abertura do PR `dev → main`**, não a cada push |
 | D-R-05 | Ausência do parâmetro no MR reprova o pipeline | **Sim**, sem default implícito |
 
