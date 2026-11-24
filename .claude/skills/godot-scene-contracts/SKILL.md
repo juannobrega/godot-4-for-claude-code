@@ -33,39 +33,50 @@ lets the blind-QA agent test the system without reading its code.
 
 | Route | When | How |
 |---|---|---|
-| **Build script** | New scene, created by the agent | `tools/scenes/build_<name>.gd`, run headless. The script is the source of truth; the `.tscn` is generated |
+| **Contract** | New scene, created by the agent | Write the tree as JSON, build it with `.claude/scripts/build_scene.sh`. The contract is committed, so the scene is regenerable |
 | **Editor** | Structural change to a scene a human built | Describe the change in `plan.md` as a task for the user. Do not attempt it as text |
-| **MCP** | A Godot MCP server is connected | See `godot-mcp-bridge`. The editor holds the live UID index |
+| **MCP** | A Godot MCP server is connected | See `godot-mcp-bridge` |
 
-## Build script shape
+## The contract
 
-```gdscript
-# tools/scenes/build_player.gd
-# Run: godot --headless --path . -s tools/scenes/build_player.gd
-extends SceneTree
+The same tree the plan declares, as JSON. Commit it beside the system's spec.
 
-func _init() -> void:
-    var root := CharacterBody2D.new()
-    root.name = "Player"
-    root.collision_layer = 1
-    root.collision_mask = 2 | 4
-
-    var sprite := AnimatedSprite2D.new()
-    sprite.name = "Sprite"
-    root.add_child(sprite)
-    sprite.owner = root          # without owner, the node is not saved
-
-    # unique_name_in_owner is what makes %Sprite resolve
-    sprite.unique_name_in_owner = true
-
-    var packed := PackedScene.new()
-    packed.pack(root)
-    ResourceSaver.save(packed, "res://scenes/player.tscn")
-    quit()
+```json
+{
+  "path": "res://scenes/player/player.tscn",
+  "root": {
+    "name": "Player", "type": "CharacterBody2D", "groups": ["player"],
+    "properties": {"collision_layer": 1, "collision_mask": 6},
+    "children": [
+      {"name": "Sprite", "type": "AnimatedSprite2D"},
+      {"name": "Hurtbox", "type": "Area2D", "groups": ["hurtbox"],
+       "properties": {"collision_layer": 2, "collision_mask": 1},
+       "children": [{"name": "HurtboxShape", "type": "CollisionShape2D"}]},
+      {"name": "DashController", "type": "Node"}
+    ]
+  }
+}
 ```
 
-`owner` is the trap: a child without `owner` set to the scene root is simply
-absent from the saved file, with no error.
+```bash
+.claude/scripts/build_scene.sh .godotspec/systems/004-dash/scene.json
+```
+
+A string property starting with `res://` is loaded as a resource. `unique`
+defaults to `true` on every node, which is what makes `%Name` resolve.
+
+## Why a contract and not a hand-written script
+
+Building a scene in GDScript by hand has two traps that produce no error:
+
+- a child whose `owner` is not the scene root is **absent from the saved file**
+- without `unique_name_in_owner`, `%Name` fails at runtime, not at build time
+
+The builder handles both, so they stop being things to remember. It also
+rejects duplicate node names, because a unique name that is not unique makes
+`%Name` ambiguous, and it writes a `uid` into the scene header — `ResourceSaver`
+does not write one for a scene built in memory, and without it the scene can
+only be referenced by path.
 
 ## What may be edited as text
 

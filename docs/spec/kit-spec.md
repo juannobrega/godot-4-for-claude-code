@@ -218,13 +218,20 @@ Três estratégias existem no mercado; o kit adota a **híbrida**:
 | Estratégia | Quem usa | Veredito |
 |---|---|---|
 | Guard: bloquear edição estrutural, liberar scalars e `[connection]` | Qb-Lab | **Adotar** como rede de segurança |
-| Build script `build_<name>.gd` gera o `.tscn` | iboss-ptk | **Adotar** para cenas novas criadas pelo agente |
-| Editar via MCP/editor com índice de UID real | godot-mcp | **Opcional**, quando disponível |
+| Build script gera o `.tscn` | iboss-ptk | **Adotar, na forma declarativa** — contrato JSON compilado por `build_scene.sh`, não GDScript escrito à mão |
+| Editar via MCP/editor com índice de UID real | godot-mcp | **Opcional**, e só resolve o que o contrato já resolve (§18) |
 
 **Política proposta:**
-1. Cena **nova** criada pelo agente → sempre via build script em `tools/scenes/build_<name>.gd`,
-   executado com `godot --headless -s`. O `.tscn` é artefato gerado e o build script é a
-   fonte da verdade.
+1. Cena **nova** criada pelo agente → **contrato declarativo em JSON**, compilado por
+   `.claude/scripts/build_scene.sh`. O `.tscn` é artefato gerado e o contrato, versionado,
+   é a fonte da verdade.
+
+   A forma declarativa substituiu o build script escrito à mão porque as duas armadilhas
+   que ele tinha não produzem erro nenhum: nó sem `owner` **não aparece** no arquivo
+   salvo, e sem `unique_name_in_owner` o `%Name` falha em runtime, não no build. O
+   compilador trata as duas, rejeita nome duplicado — que tornaria `%Name` ambíguo — e
+   escreve o `uid` no cabeçalho, que o `ResourceSaver` não grava para cena montada em
+   memória.
 2. Cena **existente** (feita no editor pelo humano) → o agente só pode alterar valores
    escalares e `[connection]`. Mudança estrutural vira **tarefa para o humano no editor**,
    descrita no `plan.md`, ou vai pelo MCP se instalado.
@@ -269,7 +276,7 @@ Router-first. Só a `using-godot-4` descreve o mapa; as outras são carregadas s
 |---|---|---|
 | `using-godot-4` | meta/entrada: precedência entre skills, mapa de delegação | — |
 | `writing-game-specs` | escrever/revisar `spec.md`, ACs, degraus | templates, exemplos bons e ruins |
-| `godot-scene-contracts` | criar/alterar `.tscn`, build scripts, cirurgia segura | regras de uid/load_steps, template de build script |
+| `godot-scene-contracts` | criar/alterar `.tscn`, contratos de cena, cirurgia segura | regras de uid/load_steps, formato do contrato |
 | `godot-resource-tuning` | superfície de tuning, `@export`, `.tres`, custom resources | padrões de Resource, validação de faixa |
 | `godot4-api-guard` | qualquer escrita de GDScript | tabela 3→4, drift entre minors, detecção via `config/features` |
 | `gdscript-conventions` | escrita de `.gd` | tipagem estrita, nomes de sinal, `%UniqueName`, estrutura de arquivo |
@@ -305,7 +312,7 @@ mesmo conteúdo é mais barato como skill ou como script:
 | `auditor` | volume | Gap analysis spec↔código para o `converge` |
 | `spec-reviewer` | incentivo | Audita a spec antes de existir código: transição de estado faltando, critério no degrau errado, número que virará literal |
 | `test-writer` | isolamento + volume | Escreve testes V2/V3 a partir dos critérios, **sem ler a implementação** — senão testa o que o código faz, não o que foi prometido |
-| `scene-builder` | volume | Escreve e roda o build script até o `.tscn` carregar. Só cena nova; mudança estrutural em cena feita no editor volta como tarefa humana |
+| `scene-builder` | volume | Escreve o contrato e roda o compilador até o `.tscn` carregar. Só cena nova; mudança estrutural em cena feita no editor volta como tarefa humana |
 | `researcher` | volume | Resolve uma dúvida de API na *minor* exata do projeto e devolve só a conclusão |
 
 **O que deliberadamente não virou agente:** detecção de API do Godot 3 e conferência de
@@ -459,6 +466,28 @@ fala com o editor aberto, ou com o projeto em disco?*
 | `ee0pdt/Godot-MCP`, `tomyud1/Godlink`, `GoPeak`, `bradypp/godot-mcp` | MIT | sim | 16–… | Alternativas menores |
 | Flockbay, GDAI MCP, Godot MCP Pro, Ziva | fechados | sim | — | Comerciais/closed-source. Ziva tem agente de playtest que joga o jogo e devolve pass/fail com vídeo — mas **não roda headless nem em CI**, exige o editor aberto |
 
+### Por que o kit deixou de precisar de um
+
+As operações de cena desses servidores são, no fundo, um GDScript rodado por
+`godot --headless --script`. Verificando o
+[`Coding-Solo/godot-mcp`](https://github.com/Coding-Solo/godot-mcp): toda a capacidade
+está num único `godot_operations.gd`, e o TypeScript é transporte e schema. Então a
+capacidade foi trazida para dentro, em `.claude/scripts/godot_ops.gd`, com atribuição MIT.
+
+O inventário que motivou isso, das 10 ferramentas de um servidor típico: **5 são
+redundantes** com o CLI (versão, info de projeto, listar projetos, ler e regravar uid),
+3 competem com o contrato declarativo, e **2 acrescentavam** — `export_mesh_library`, que
+o kit não cobria de forma alguma, e `load_sprite`, que aponta para alteração de nó em cena
+existente.
+
+As duas aditivas foram absorvidas. O `export_mesh_library` portado tinha um defeito que
+só aparece em execução: `set_item_preview()` recebe `Texture2D` e estava recebendo `Mesh`,
+o que **não compila em 4.7.2** — mais um caso em que `--check-only` sai com código 0 e só
+a saída denuncia.
+
+O que continua fora de alcance sem MCP é **alteração estrutural de cena que um humano
+montou no editor**. Cena nova está resolvida em árvore; essa não.
+
 ### Leitura para o kit
 
 1. **Nenhum MCP substitui a escada de verificação.** Todos os que fazem playtest de verdade
@@ -469,7 +498,8 @@ fala com o editor aberto, ou com o projeto em disco?*
    lista de ferramentas do agente; precisaria de curadoria.
 3. **`Coding-Solo/godot-mcp` é o default pragmático** para quem só quer rodar o projeto e
    capturar debug output: 14 tools, instala com um comando, é o mais usado do ecossistema.
-4. **Decisão mantida:** MCP continua **opcional**. Uma skill isolada (`godot-mcp-bridge`)
+4. **Decisão mantida, com motivo novo:** MCP continua **opcional** — e agora porque as
+   capacidades que importavam estão no próprio kit, não porque o CLI bastava. Uma skill isolada (`godot-mcp-bridge`)
    detecta qual servidor está instalado e adapta o loop; sem MCP, tudo cai no CLI. Isso
    protege o kit da instabilidade de um ecossistema com dez implementações concorrentes.
 

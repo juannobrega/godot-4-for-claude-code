@@ -121,9 +121,21 @@ def check_scripts():
         r = subprocess.run(["bash", "-n", str(p)], capture_output=True, text=True)
         if r.returncode:
             errors.append(f"{p.relative_to(ROOT)}: syntax error: {r.stderr.strip()}")
-        # macOS ships bash 3.2, which has no ${var,,} or ${var^^}.
-        if re.search(r"\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)\}", p.read_text()):
-            errors.append(f"{p.relative_to(ROOT)}: uses bash 4 case expansion; breaks on macOS")
+        # macOS ships bash 3.2 as /bin/bash. These all need 4+, and catching
+        # them here is worth more than a macOS CI job: the job takes minutes to
+        # get a runner, and its `run:` steps resolve bash from PATH, where the
+        # runner has Homebrew bash 5 -- so it does not even test 3.2.
+        text = p.read_text()
+        for pattern, what in (
+            (r"\$\{[A-Za-z_][A-Za-z0-9_]*(,,|\^\^)[\}:]", "case expansion ${var,,} / ${var^^}"),
+            (r"^\s*declare\s+-[A-Za-z]*A", "associative array (declare -A)"),
+            (r"^\s*(readarray|mapfile)\b", "readarray / mapfile"),
+            (r"\|&", "|& pipe shorthand"),
+            (r"&>>", "&>> append redirect"),
+        ):
+            if re.search(pattern, text, re.M):
+                errors.append(f"{p.relative_to(ROOT)}: uses {what}, which needs "
+                              f"bash 4; macOS ships 3.2 as /bin/bash")
     for p in sorted((CLAUDE / "scripts").glob("*.py")):
         r = subprocess.run([sys.executable, "-m", "py_compile", str(p)],
                            capture_output=True, text=True)
@@ -230,6 +242,38 @@ def check_engine_pin_parses():
         )
 
 
+# Routes that were removed. A message or template still pointing at one sends
+# an agent somewhere that does not exist -- and the worst offender was the
+# scene guard's own blocking message, which is the first thing read when an edit
+# is refused. A reviewer caught that once; this makes it fail instead.
+REMOVED_ROUTES = {
+    "tools/scenes/build_": "use .claude/scripts/build_scene.sh with a scene contract",
+}
+
+
+def check_removed_routes():
+    for path in sorted(ROOT.rglob("*")):
+        if not path.is_file() or ".git/" in str(path):
+            continue
+        if path.suffix not in (".md", ".py", ".sh", ".json", ".gd", ".yml"):
+            continue
+        rel = path.relative_to(ROOT)
+        if str(rel).startswith("docs/research/"):
+            continue  # a record of what other projects do, not our own routes
+        if path.resolve() == pathlib.Path(__file__).resolve():
+            continue  # this file names the routes in order to look for them
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for route, advice in REMOVED_ROUTES.items():
+            if route in text:
+                line = next((i for i, l in enumerate(text.splitlines(), 1)
+                             if route in l), 0)
+                errors.append(f"{rel}:{line}: references the removed route "
+                              f"'{route}' — {advice}")
+
+
 def check_templates():
     for name in ("spec.md", "plan.md", "tasks.md", "contract.md",
                  "constitution.md", "config.yml"):
@@ -245,7 +289,8 @@ def check_templates():
 def main():
     for check in (check_skills, check_agents, check_commands,
                   check_hooks, check_scripts, check_powershell,
-                  check_engine_pin_parses, check_templates):
+                  check_engine_pin_parses, check_removed_routes,
+                  check_templates):
         check()
     for w in warnings:
         print(f"warning: {w}")

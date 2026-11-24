@@ -16,7 +16,7 @@ a request to change the constitution — raise that explicitly if needed.
 **Scene contract.** The node tree this system requires, written before any
 `.tscn` exists: nodes, types, unique names, exported properties, groups,
 collision layers and masks. Then pick the creation route and justify it:
-a build script for a new agent-made scene, the Godot editor for a structural
+a scene contract for a new agent-made scene, the Godot editor for a structural
 change to an existing one, MCP if the editor is live. See
 `.claude/skills/godot-scene-contracts/SKILL.md`.
 

@@ -1,0 +1,20 @@
+{
+  "//": "Scene contract. Committed, so the .tscn stays regenerable: build with",
+  "//build": ".claude/scripts/build_scene.sh .godotspec/systems/NNN-slug/scene.json",
+  "//fields": "unique defaults to true, which is what makes %Name resolve",
+
+  "path": "res://scenes/{{SLUG}}/{{SLUG}}.tscn",
+  "root": {
+    "name": "{{CLASS}}",
+    "type": "Node2D",
+    "groups": [],
+    "properties": {},
+    "children": [
+      {
+        "name": "Sprite",
+        "type": "AnimatedSprite2D",
+        "properties": {}
+      }
+    ]
+  }
+}

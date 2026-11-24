@@ -58,8 +58,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # /bin/bash explicitly, not the PATH bash: on macOS runners Homebrew
+      # bash 5 shadows the 3.2 that macOS actually ships, so the default shell
+      # would test the same version ubuntu already covers.
       - name: Run install.sh against throwaway projects
-        run: ./tools/test_install_sh.sh
+        shell: /bin/bash -e {0}
+        run: |
+          echo "bash $BASH_VERSION"
+          ./tools/test_install_sh.sh
 
   install-windows:
     name: Windows installer (${{ matrix.shell }})

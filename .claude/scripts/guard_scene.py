@@ -88,8 +88,8 @@ def main():
             block(
                 f"Write replaces the whole file: {base}",
                 "- Change one property? Use Edit on that line instead.\n"
-                "- Need structural change? Generate the scene from "
-                "tools/scenes/build_<name>.gd, or make it in the Godot editor.",
+                "- Need structural change? Build it from a scene contract with\n"
+                "  .claude/scripts/build_scene.sh, or make it in the Godot editor.",
             )
         return  # creating a new file is fine
 
@@ -113,7 +113,8 @@ def main():
             block(
                 f"{base}: the edit changes structural lines:\n{detail}",
                 "- Add or remove a node, resource or uid? Do it in the Godot "
-                "editor, or regenerate from tools/scenes/build_<name>.gd.\n"
+                "editor, or regenerate from the scene contract with\n"
+                "  .claude/scripts/build_scene.sh.\n"
                 "- Rewiring a signal? Edit the [connection] line alone; that is "
                 "allowed.",
             )
